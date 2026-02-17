@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <title>Твій План</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body class="bg-light">
+
+<nav class="navbar navbar-expand-lg navbar-dark bg-primary mb-4">
+  <div class="container">
+    <a class="navbar-brand fw-bold" href="/">ActiveTracker</a>
+    <div class="navbar-nav">
+        <a class="nav-link" href="/">Дашборд</a>
+        <a class="nav-link active fw-bold" href="/calculator">Калькулятор</a>
+        <a class="nav-link" href="/library">Бібліотека</a>
+    </div>
+  </div>
+</nav>
+
+<div class="container text-center" style="max-width: 700px;">
+    <div class="card p-5 shadow border-top border-5 border-success">
+        <h1 class="mb-3">Привіт, {{ plan.user }}!</h1>
+        <p class="text-muted">Твій персональний план готовий:</p>
+        
+        <div class="bg-white border rounded p-3 mb-4 shadow-sm">
+            <h2 class="display-3 text-success fw-bold">{{ plan.calories }}</h2>
+            <span class="text-uppercase fw-bold text-muted">ккал / день</span>
+        </div>
+
+        <h4 class="mb-3 text-start">🥗 Твоє харчування (БЖВ)</h4>
+        <div class="row g-3 mb-4">
+            <div class="col-4">
+                <div class="p-3 bg-white border rounded">
+                    <div class="text-muted small">Білки</div>
+                    <div class="fs-4 fw-bold">{{ plan.macros.protein }}г</div>
+                </div>
+            </div>
+            <div class="col-4">
+                <div class="p-3 bg-white border rounded">
+                    <div class="text-muted small">Жири</div>
+                    <div class="fs-4 fw-bold">{{ plan.macros.fat }}г</div>
+                </div>
+            </div>
+            <div class="col-4">
+                <div class="p-3 bg-white border rounded">
+                    <div class="text-muted small">Вуглеводи</div>
+                    <div class="fs-4 fw-bold">{{ plan.macros.carbs }}г</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="alert alert-primary text-start">
+            <h5 class="alert-heading">🏋️‍♂️ Рекомендоване тренування</h5>
+            <hr>
+            <p><strong>Тип:</strong> {{ plan.training.type }}</p>
+            <p class="mb-0"><strong>Частота:</strong> {{ plan.training.freq }}</p>
+        </div>
+
+        <a href="/calculator" class="btn btn-outline-secondary mt-3">Перерахувати</a>
+    </div>
+</div>
+</body>
+</html>

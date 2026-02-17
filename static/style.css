@@ -1,0 +1,122 @@
+/* static/style.css */
+:root {
+    --primary: #4f46e5;
+    --secondary: #ec4899;
+    --bg: #f3f4f6;
+    --card-bg: #ffffff;
+}
+
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background-color: var(--bg);
+    margin: 0;
+    padding: 20px;
+    display: flex;
+    justify-content: center;
+    min-height: 100vh;
+}
+
+.container {
+    background: var(--card-bg);
+    padding: 2rem;
+    border-radius: 15px;
+    box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+    width: 100%;
+    max-width: 500px;
+}
+
+h1 {
+    text-align: center;
+    color: #1f2937;
+    margin-bottom: 1.5rem;
+}
+
+/* Стилі форми */
+label {
+    display: block;
+    margin-bottom: 0.5rem;
+    color: #4b5563;
+    font-weight: 600;
+}
+
+input, select {
+    width: 100%;
+    padding: 10px;
+    margin-bottom: 1rem;
+    border: 1px solid #d1d5db;
+    border-radius: 8px;
+    box-sizing: border-box;
+    font-size: 16px;
+}
+
+button {
+    width: 100%;
+    background-color: var(--primary);
+    color: white;
+    padding: 12px;
+    border: none;
+    border-radius: 8px;
+    font-size: 16px;
+    cursor: pointer;
+    font-weight: bold;
+    transition: background 0.3s;
+}
+
+button:hover {
+    background-color: #4338ca;
+}
+
+/* Стилі результатів */
+.result-card {
+    text-align: center;
+    border-top: 5px solid var(--primary);
+}
+
+.calories-box {
+    background: #e0e7ff;
+    padding: 1rem;
+    border-radius: 10px;
+    margin: 1.5rem 0;
+}
+
+.calories-box h2 {
+    color: var(--primary);
+    font-size: 3rem;
+    margin: 0;
+}
+
+.macros-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 10px;
+    margin-bottom: 1.5rem;
+}
+
+.macro-item {
+    background: #f9fafb;
+    padding: 10px;
+    border-radius: 8px;
+    border: 1px solid #e5e7eb;
+}
+
+.macro-item strong {
+    display: block;
+    font-size: 1.2rem;
+    color: #111827;
+}
+
+.training-box {
+    background: #fdf2f8;
+    border: 1px solid #fbcfe8;
+    padding: 1rem;
+    border-radius: 8px;
+    color: #9d174d;
+}
+
+.back-link {
+    display: block;
+    text-align: center;
+    margin-top: 1rem;
+    color: #6b7280;
+    text-decoration: none;
+}

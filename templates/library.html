@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <title>Бібліотека вправ</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body class="bg-light">
+
+<nav class="navbar navbar-expand-lg navbar-dark bg-primary mb-4">
+  <div class="container">
+    <a class="navbar-brand fw-bold" href="/">ActiveTracker</a>
+    <div class="navbar-nav">
+        <a class="nav-link" href="/">Дашборд</a>
+        <a class="nav-link" href="/calculator">Калькулятор</a>
+        <a class="nav-link active fw-bold" href="/library">Бібліотека</a>
+    </div>
+  </div>
+</nav>
+
+<div class="container">
+    <h2 class="text-center mb-5">Бібліотека вправ</h2>
+    
+    {% for category, items in exercises.items() %}
+    <div class="mb-5">
+        <h3 class="border-bottom pb-2 text-primary">{{ category }}</h3>
+        <div class="row row-cols-1 row-cols-md-3 g-4 mt-2">
+            {% for ex in items %}
+            <div class="col">
+                <div class="card h-100 shadow-sm border-0 hover-effect">
+                    <div class="d-flex justify-content-center pt-4">
+                        <img src="{{ ex.img }}" style="height: 100px; width: 100px;">
+                    </div>
+                    <div class="card-body text-center">
+                        <h5 class="card-title fw-bold">{{ ex.name }}</h5>
+                        <p class="card-text text-muted">{{ ex.desc }}</p>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endfor %}
+</div>
+</body>
+</html>
