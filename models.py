@@ -16,6 +16,13 @@ class User(Base):
     password_hash = Column(String, nullable=False) # Пароль (зашифрований)
     created_at = Column(DateTime, default=datetime.now)
 
+    ### для створення топу користувачів
+    current_streak = Column(Integer, default=0)
+    best_streak = Column(Integer, default=0)
+    total_workouts = Column(Integer, default=0)
+    last_workout_date = Column(Date, nullable=True)
+    ###################
+
     # Зв'язки з іншими таблицями
     measurements = relationship("UserMeasurement", back_populates="user")
     nutrition_plans = relationship("NutritionPlan", back_populates="user")
@@ -28,7 +35,7 @@ class UserMeasurement(Base):
     id = Column(Integer, primary_key=True)
     user_id = Column(Integer, ForeignKey('users.id'))
     date = Column(Date, default=datetime.now)
-    
+
     weight = Column(Float, nullable=False)   # Вага (для формули BMR)
     height = Column(Float, nullable=False)   # Зріст
     age = Column(Integer, nullable=False)    # Вік
