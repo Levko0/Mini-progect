@@ -1,9 +1,9 @@
 from flask import Flask, render_template, request, redirect, url_for
-from datetime import datetime, timedelta
+from datetime import datetime
 from algotitm import FitnessUser 
+from models import Session, Workout, UserProfile # Підключаємо базу даних
 
 app = Flask(__name__)
-
 
 NEW_IMAGE_URL = "https://tovarystvo-kraftu.com/content/uploads/images/yajtsia-kuriache-tsesarky-perepelyne.png"
 
@@ -20,50 +20,56 @@ EXERCISE_DB = {
     ],
     "Спорт": [
         {"name": "Волейбол", "desc": "Ігрова практика.", "img": NEW_IMAGE_URL},
-        {"name": "Футбол", "desc": "Активна гра.", "img": NEW_IMAGE_URL}
+        {"name": "Баскетбол", "desc": "Кидки в кільце 30 хв.", "img": NEW_IMAGE_URL},
+        {"name": "Плавання", "desc": "Кроль 1000м.", "img": NEW_IMAGE_URL}
     ]
 }
 
-workouts = []
+def get_stats(db_session):
+    # Дістаємо всі тренування з бази даних
+    all_workouts = db_session.query(Workout).all()
+    
+    total_load = sum(w.load for w in all_workouts if w.load)
+    count = len(all_workouts)
+    
+    return {
+        "total": round(total_load, 1),
+        "count": count,
+        "chart_labels": [w.date for w in all_workouts[-7:]],
+        "chart_data": [w.load for w in all_workouts[-7:]]
+    }
 
 def calculate_load(duration, intensity):
-    if not duration or not intensity: return 0
-    return int(duration) * int(intensity)
-
-def get_stats():
-    today = datetime.now().date()
-    week_ago = today - timedelta(days=6)
-    
-    labels = []
-    data = []
-    
-    for i in range(7):
-        day = week_ago + timedelta(days=i)
-        day_str = day.strftime('%Y-%m-%d')
-        labels.append(day.strftime('%d.%m'))
-        
-        day_load = sum(w['load'] for w in workouts if w['date'] == day_str)
-        data.append(day_load)
-
-    return {
-        "total": sum(w['load'] for w in workouts),
-        "count": len(workouts),
-        "chart_labels": labels,
-        "chart_data": data
-    }
+    try:
+        d = float(duration)
+        i = float(intensity)
+        return round(d * i * 0.1, 1)
+    except:
+        return 0
 
 @app.route("/", methods=["GET", "POST"])
 def dashboard():
+    db = Session() # Відкриваємо зв'язок з БД
+    
     if request.method == "POST":
-        workouts.append({
-            "date": request.form.get("date"),
-            "type": request.form.get("type"),
-            "duration": request.form.get("duration"),
-            "load": calculate_load(request.form.get("duration"), request.form.get("intensity"))
-        })
+        # Зберігаємо нове тренування в базу даних
+        new_workout = Workout(
+            date=request.form.get("date"),
+            type=request.form.get("type"),
+            duration=int(request.form.get("duration", 0)),
+            load=calculate_load(request.form.get("duration"), request.form.get("intensity"))
+        )
+        db.add(new_workout)
+        db.commit()
+        db.close()
         return redirect(url_for("dashboard"))
     
-    return render_template("dashboard.html", stats=get_stats(), workouts=workouts, today=datetime.now().strftime('%Y-%m-%d'))
+    # Витягуємо тренування (від найновіших до найстаріших)
+    workouts = db.query(Workout).order_by(Workout.id.desc()).all()
+    stats = get_stats(db)
+    db.close()
+    
+    return render_template("dashboard.html", stats=stats, workouts=workouts, today=datetime.now().strftime('%Y-%m-%d'))
 
 @app.route("/calculator", methods=["GET", "POST"])
 def calculator():
@@ -77,6 +83,17 @@ def calculator():
             goal = request.form.get("goal")
             pal = float(request.form.get("pal"))
 
+            # Зберігаємо введені користувачем дані в базу даних
+            db = Session()
+            new_profile = UserProfile(
+                name=name, weight=weight, height=height, age=age, 
+                gender=gender, goal=goal, pal=pal
+            )
+            db.add(new_profile)
+            db.commit()
+            db.close()
+
+            # Розраховуємо план через ваш algotitm.py
             user = FitnessUser(name, weight, height, age, gender, goal, pal)
             return render_template("result.html", plan=user.get_full_plan())
 
@@ -90,4 +107,4 @@ def library():
     return render_template("library.html", exercises=EXERCISE_DB)
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    app.run(debug=True, port=5000)
