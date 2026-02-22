@@ -1,3 +1,4 @@
+from collections import defaultdict
 from flask import Flask, render_template, request, jsonify, session
 from flask_cors import CORS
 from sqlalchemy import create_engine
@@ -6,7 +7,9 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime, date
 import csv, io
 
-from models import Base, User, UserMeasurement, NutritionPlan, Exercise, WorkoutLog
+
+from sqlalchemy import func
+from models import Base, User, UserMeasurement, NutritionPlan, Exercise, WorkoutLog, FoodLog
 from algorithm import FitnessUser
 
 app = Flask(__name__)
@@ -193,13 +196,17 @@ class DashboardHandler(ProtectedHandler):
                     .order_by(WorkoutLog.date.desc()).limit(5).all())
         workouts_count = db.query(WorkoutLog).filter_by(user_id=uid).count()
 
-        training_rec, overtraining = None, None
+        # НОВЕ: Рахуємо скільки калорій з'їдено за сьогодні
+        consumed_today = db.query(func.sum(FoodLog.calories)).filter(
+            FoodLog.user_id == uid,
+            FoodLog.date == date.today()
+        ).scalar() or 0
+
         training_rec, overtraining = None, None
         if m:
             fu = self._build_fitness_user(m)
             fu.update_training_plan() # Оновлюємо план
             training_rec = fu.training.get('type') # Беремо тип тренування
-            # overtraining = fu.check_overtraining(workouts_count) # ВИДАЛЯЄМО, бо цього методу більше немає
 
         return self.ok({
             'user': user.username,
@@ -210,7 +217,7 @@ class DashboardHandler(ProtectedHandler):
                           'duration': w.duration_minutes} for w in workouts],
             'total_workouts': workouts_count,
             'recommendation': training_rec,
-            'overtraining': overtraining
+            'consumed_today': consumed_today # Передаємо на фронтенд
         })
 
 class LeaderboardHandler(BaseHandler):
@@ -309,50 +316,20 @@ class SettingsHandler(ProtectedHandler):###
         db.commit()
         return self.ok({'message': 'Налаштування успішно оновлено!'})
 
+class LogFoodHandler(ProtectedHandler):
+    def handle_protected(self):
+        data = request.json
+        db = self.get_db()
 
-# ═══════════════════════════════════════════════════
-# ═══════════════════════════════════════════════════
-# МАРШРУТИ
-# ═══════════════════════════════════════════════════
-
-@app.route('/')
-def dashboard_page():    return render_template_string(HTML_DASHBOARD)
-
-@app.route('/login')
-def login_page():        return render_template_string(HTML_LOGIN)
-
-@app.route('/register')
-def register_page():     return render_template_string(HTML_REGISTER)
-
-@app.route('/exercises')
-def exercises_page():    return render_template_string(HTML_EXERCISES)
-
-@app.route('/api/register',             methods=['POST'])
-def register():          return RegisterHandler().handle()
-
-@app.route('/api/login',                methods=['POST'])
-def login():             return LoginHandler().handle()
-
-@app.route('/api/logout',               methods=['POST'])
-def logout():            return LogoutHandler().handle()
-
-@app.route('/api/profile/measurements', methods=['POST'])
-def save_measurements(): return SaveMeasurementsHandler().handle()
-
-@app.route('/api/workouts/log',         methods=['POST'])
-def log_workout():       return LogWorkoutHandler().handle()
-
-@app.route('/api/progress/analyze',     methods=['POST'])
-def analyze_progress():  return ProgressAnalysisHandler().handle()
-
-@app.route('/api/tracker/import',       methods=['POST'])
-def import_tracker():    return TrackerImportHandler().handle()
-
-@app.route('/api/dashboard',            methods=['GET'])
-def dashboard_api():     return DashboardHandler().handle()
-
-@app.route('/api/leaderboard', methods=['GET'])
-def leaderboard():       return LeaderboardHandler().handle()
+        food = FoodLog(
+            user_id=self.current_user_id(),
+            date=date.today(),
+            calories=int(data.get('calories', 0)),
+            meal_name=data.get('meal_name', 'Прийом їжі')
+        )
+        db.add(food)
+        db.commit()
+        return self.ok({'message': 'Калорії збережено!'}, 201)
 
 # ═══════════════════════════════════════════════════
 # МАРШРУТИ (Оновлено під нові файли)
@@ -371,9 +348,24 @@ def login_page():
 def register_page():
     return render_template('register.html')
 
-@app.route('/library') # Хлопці назвали файл library.html, краще назвати маршрут так само
+@app.route('/library')
 def library_page():
-    return render_template('library.html')
+    db = DBSession()
+    all_exercises = db.query(Exercise).all()
+
+    # Групуємо вправи за категоріями, як цього чекає library.html
+    from collections import defaultdict
+    exercises_dict = defaultdict(list)
+
+    for ex in all_exercises:
+        exercises_dict[ex.category].append({
+            "name": ex.name,
+            "desc": ex.description,
+            "video_url": ex.video_url, # Передаємо відео
+            "img": "https://cdn-icons-png.flaticon.com/512/2964/2964514.png" # Дефолтна картинка-заглушка
+        })
+
+    return render_template('library.html', exercises=exercises_dict)
 
 @app.route('/calculator') # Додаємо маршрут для їхнього калькулятора
 def calculator_page():
@@ -382,6 +374,9 @@ def calculator_page():
 @app.route('/settings')
 def settings_page():
     return render_template('settings.html')
+
+@app.route('/api/food/log', methods=['POST'])
+def log_food(): return LogFoodHandler().handle()
 
 # --- API МАРШРУТИ ЗАЛИШАЄМО БЕЗ ЗМІН! ---
 # Вони відповідають за логіку, базу даних і розрахунки.

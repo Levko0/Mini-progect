@@ -27,6 +27,7 @@ class User(Base):
     measurements = relationship("UserMeasurement", back_populates="user")
     nutrition_plans = relationship("NutritionPlan", back_populates="user")
     workouts = relationship("WorkoutLog", back_populates="user")
+    food_logs = relationship("FoodLog", back_populates="user") # <--- ДОДАЙ ЦЕЙ РЯДОК
 
 class UserMeasurement(Base):
     """Тут зберігаємо історію ваги та параметрів для аналізу прогресу"""
@@ -66,15 +67,29 @@ class NutritionPlan(Base):
 # -----------------------------------------------------------
 # 3. ТРЕНУВАННЯ (Бібліотека та Логи)
 # -----------------------------------------------------------
+
 class Exercise(Base):
     """Бібліотека вправ (Довідник)"""
     __tablename__ = 'exercises'
 
     id = Column(Integer, primary_key=True)
-    name = Column(String, nullable=False)       # Назва (напр. "Жим лежачи")
-    category = Column(String)                   # 'cardio', 'strength'
-    difficulty = Column(String)                 # 'easy', 'hard'
-    description = Column(String)                # Опис техніки
+    name = Column(String, nullable=False)
+    category = Column(String)
+    difficulty = Column(String)
+    description = Column(String)
+    video_url = Column(String)                  # Нове поле від партнера
+    is_essential = Column(Boolean, default=False) # Нове поле від партнера
+    day_number = Column(Integer, nullable=True) # Нове поле від партнера
+
+# Якщо ти робив кроки з калоріями, переконайся, що FoodLog теж є у файлі:
+class FoodLog(Base):
+    __tablename__ = 'food_logs'
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey('users.id'))
+    date = Column(Date, default=datetime.now)
+    calories = Column(Integer, nullable=False)
+    meal_name = Column(String)
+    user = relationship("User", back_populates="food_logs")
 
 class WorkoutLog(Base):
     """Щоденник тренувань: факт виконання"""
