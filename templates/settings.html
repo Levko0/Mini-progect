@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8"><title>Налаштування</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body style="background:#f4f6f9;">
+<nav class="navbar navbar-expand-lg navbar-dark bg-secondary mb-4">
+  <div class="container">
+    <a class="navbar-brand fw-bold" href="/">ActiveTracker</a>
+    <a href="/" class="btn btn-outline-light">На головну</a>
+  </div>
+</nav>
+<div class="container d-flex justify-content-center">
+    <div class="card p-4 shadow-sm" style="width: 400px;">
+        <h4 class="fw-bold mb-3">Налаштування профілю</h4>
+        <div id="settings-alert" class="alert d-none"></div>
+
+        <label class="form-label">Нове ім'я користувача</label>
+        <input id="new-username" type="text" class="form-control mb-3" placeholder="Залишіть пустим, якщо не змінюєте">
+
+        <label class="form-label">Новий пароль</label>
+        <input id="new-password" type="password" class="form-control mb-4" placeholder="Введіть новий пароль">
+
+        <button class="btn btn-primary w-100" onclick="updateSettings()">Зберегти зміни</button>
+    </div>
+</div>
+
+<script>
+async function updateSettings() {
+    const newUsername = document.getElementById('new-username').value;
+    const newPassword = document.getElementById('new-password').value;
+
+    const res = await fetch('/api/settings', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+            new_username: newUsername,
+            new_password: newPassword
+        })
+    });
+
+    const data = await res.json();
+    const alertBox = document.getElementById('settings-alert');
+    alertBox.classList.remove('d-none');
+
+    if (res.ok) {
+        alertBox.className = 'alert alert-success';
+        alertBox.textContent = data.message;
+        document.getElementById('new-password').value = ''; // очищаємо поле пароля
+    } else {
+        alertBox.className = 'alert alert-danger';
+        alertBox.textContent = data.error;
+    }
+}
+</script>
+</body></html>
