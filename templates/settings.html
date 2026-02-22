@@ -11,26 +11,40 @@
     <a href="/" class="btn btn-outline-light">На головну</a>
   </div>
 </nav>
-<div class="container d-flex justify-content-center">
+<div class="container d-flex flex-column align-items-center gap-4">
+
+    <!-- Ваш оригінальний блок — без змін -->
     <div class="card p-4 shadow-sm" style="width: 400px;">
         <h4 class="fw-bold mb-3">Налаштування профілю</h4>
         <div id="settings-alert" class="alert d-none"></div>
-
         <label class="form-label">Нове ім'я користувача</label>
         <input id="new-username" type="text" class="form-control mb-3" placeholder="Залишіть пустим, якщо не змінюєте">
-
         <label class="form-label">Новий пароль</label>
         <input id="new-password" type="password" class="form-control mb-4" placeholder="Введіть новий пароль">
-
         <button class="btn btn-primary w-100" onclick="updateSettings()">Зберегти зміни</button>
     </div>
+
+    <!-- Новий блок імпорту трекера -->
+    <div class="card p-4 shadow-sm" style="width: 400px;">
+        <h4 class="fw-bold mb-1">Імпорт з трекера активності</h4>
+        <p class="text-muted small mb-3">Завантажте CSV-файл з вашого трекера. Файл має містити колонки <code>steps</code> та <code>active_calories</code>.</p>
+        <div id="tracker-alert" class="alert d-none"></div>
+        <input id="tracker-file" type="file" accept=".csv" class="form-control mb-3">
+        <button class="btn btn-success w-100" onclick="importTracker()">Завантажити та оновити план</button>
+        <div id="tracker-result" class="d-none mt-3 p-3 bg-light rounded">
+            <p class="mb-1">📊 Середня кількість кроків: <strong id="avg-steps">—</strong></p>
+            <p class="mb-1">🏃 Рівень активності: <strong id="activity-level">—</strong></p>
+            <p class="mb-0">🔥 Новий коефіцієнт PAL: <strong id="new-pal">—</strong></p>
+        </div>
+    </div>
+
 </div>
 
 <script>
+// Ваш оригінальний код — без змін
 async function updateSettings() {
     const newUsername = document.getElementById('new-username').value;
     const newPassword = document.getElementById('new-password').value;
-
     const res = await fetch('/api/settings', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
@@ -39,19 +53,55 @@ async function updateSettings() {
             new_password: newPassword
         })
     });
-
     const data = await res.json();
     const alertBox = document.getElementById('settings-alert');
     alertBox.classList.remove('d-none');
-
     if (res.ok) {
         alertBox.className = 'alert alert-success';
         alertBox.textContent = data.message;
-        document.getElementById('new-password').value = ''; // очищаємо поле пароля
+        document.getElementById('new-password').value = '';
     } else {
         alertBox.className = 'alert alert-danger';
         alertBox.textContent = data.error;
     }
 }
+
+// Новий код імпорту трекера
+async function importTracker() {
+    const file = document.getElementById('tracker-file').files[0];
+    const alertBox = document.getElementById('tracker-alert');
+
+    if (!file) {
+        alertBox.className = 'alert alert-warning';
+        alertBox.classList.remove('d-none');
+        alertBox.textContent = 'Будь ласка, оберіть CSV-файл.';
+        return;
+    }
+
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const res = await fetch('/api/tracker/import', {
+        method: 'POST',
+        credentials: 'include',
+        body: formData
+    });
+
+    const data = await res.json();
+    alertBox.classList.remove('d-none');
+
+    if (res.ok) {
+        alertBox.className = 'alert alert-success';
+        alertBox.textContent = 'План харчування успішно оновлено!';
+        document.getElementById('avg-steps').textContent = data.avg_steps.toLocaleString();
+        document.getElementById('activity-level').textContent = data.activity_level;
+        document.getElementById('new-pal').textContent = data.new_pal;
+        document.getElementById('tracker-result').classList.remove('d-none');
+    } else {
+        alertBox.className = 'alert alert-danger';
+        alertBox.textContent = data.error || 'Помилка при імпорті';
+    }
+}
 </script>
-</body></html>
+</body>
+</html>
