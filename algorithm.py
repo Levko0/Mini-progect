@@ -75,17 +75,17 @@ class ProgressAnalyzer:
         """Дерево рішень для коригування плану."""
         delta = new_weight - user.weight
 
-        # 1. Плато (Схуднення + вага не змінилася)
         if user.goal == 'loss' and abs(delta) < 0.2:
-            user.tdee_adj *= 0.95  # -5% калорій
+            user.tdee_adj *= 0.95
             return "Плато! Калорії зменшено на 5%. Додайте +1 тренування."
-
-        # 2. Втрата м'язів (Набір + вага впала)
+        
+        elif user.goal == 'loss' and delta < 0:
+            return "Все йде за планом! Збільште інтенсивність на 2.5–5%."
+        
         elif user.goal == 'gain' and delta < 0:
-            user.tdee_adj *= 1.10  # +10% калорій
+            user.tdee_adj *= 1.10
             return "Вага падає! Калорійність збільшена на 10%."
-
-        # 3. Прогрес
+        
         else:
             return "Все йде за планом! Збільште інтенсивність на 2.5–5%."
 
@@ -110,3 +110,4 @@ assert olga.tdee_adj == old_cals * 0.95
 assert "Плато" in result
 
 print("Всі тести пройдено успішно! Код готовий до роботи.")
+
