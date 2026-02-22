@@ -104,18 +104,16 @@ class SaveMeasurementsHandler(ProtectedHandler):
                          data['gender'], data['goal'], data.get('activity_level', 1.2))
         plan = self._save_nutrition_plan(db, fu)
         db.commit()
-        fu.update_training_plan() # Оновлюємо план
+        fu.update_training_plan()
         return self.ok({'daily_calories': plan.daily_calories, 'protein_g': plan.protein_g,
                         'fat_g': plan.fat_g, 'carbs_g': plan.carbs_g,
-                        'recommendation': fu.training.get('type')}, 201) # Беремо тип тренування
+                        'recommendation': fu.training.get('type')}, 201)
 
 
 class LogWorkoutHandler(ProtectedHandler):
     def handle_protected(self):
         data = request.json
         db = self.get_db()
-
-        # Додаємо тренування
         workout = WorkoutLog(
             user_id=self.current_user_id(),
             date=datetime.now(),
@@ -123,8 +121,6 @@ class LogWorkoutHandler(ProtectedHandler):
             duration_minutes=data.get('duration_minutes', 0)
         )
         db.add(workout)
-
-        # ОНОВЛЕННЯ STREAK ← НОВИЙ КОД
         self._update_streak(db, self.current_user_id(), workout.date)
 
         progress = None
@@ -141,41 +137,28 @@ class LogWorkoutHandler(ProtectedHandler):
         db.commit()
         return self.ok({'message': 'Тренування записано!', 'progress': progress}, 201)
 
-    # НОВА ФУНКЦІЯ ДЛЯ STREAK
     def _update_streak(self, db, user_id, workout_date):
-        """Оновлює streak користувача"""
         user = db.query(User).filter_by(id=user_id).first()
         if not user:
             return
-
-        # Перетворюємо в date якщо datetime
         if isinstance(workout_date, datetime):
             workout_date = workout_date.date()
-
-        # Перше тренування
         if user.last_workout_date is None:
             user.current_streak = 1
             user.best_streak = 1
             user.total_workouts = 1
             user.last_workout_date = workout_date
             return
-
-        # Різниця в днях
         days_diff = (workout_date - user.last_workout_date).days
-
         if days_diff == 0:
-            # Те саме день - тільки лічильник
             user.total_workouts += 1
         elif days_diff == 1:
-            # Вчора - продовжуємо серію
             user.current_streak += 1
             user.total_workouts += 1
             user.last_workout_date = workout_date
-
             if user.current_streak > user.best_streak:
                 user.best_streak = user.current_streak
         else:
-            # Пропуск - почати спочатку
             user.current_streak = 1
             user.total_workouts += 1
             user.last_workout_date = workout_date
@@ -194,12 +177,10 @@ class DashboardHandler(ProtectedHandler):
         workouts_count = db.query(WorkoutLog).filter_by(user_id=uid).count()
 
         training_rec, overtraining = None, None
-        training_rec, overtraining = None, None
         if m:
             fu = self._build_fitness_user(m)
-            fu.update_training_plan() # Оновлюємо план
-            training_rec = fu.training.get('type') # Беремо тип тренування
-            # overtraining = fu.check_overtraining(workouts_count) # ВИДАЛЯЄМО, бо цього методу більше немає
+            fu.update_training_plan()
+            training_rec = fu.training.get('type')
 
         return self.ok({
             'user': user.username,
@@ -213,28 +194,23 @@ class DashboardHandler(ProtectedHandler):
             'overtraining': overtraining
         })
 
+
 class LeaderboardHandler(BaseHandler):
     def handle(self):
         sort_by = request.args.get('sort_by', 'current_streak')
         limit = int(request.args.get('limit', 10))
-
         db = self.get_db()
-
-        # Вибираємо поле сортування
         if sort_by == 'best_streak':
             order_field = User.best_streak
         elif sort_by == 'total_workouts':
             order_field = User.total_workouts
         else:
             order_field = User.current_streak
-
-        # Топ користувачів
         top_users = (db.query(User)
                      .filter(User.total_workouts > 0)
                      .order_by(order_field.desc())
                      .limit(limit)
                      .all())
-
         leaderboard = []
         for rank, user in enumerate(top_users, start=1):
             leaderboard.append({
@@ -245,8 +221,8 @@ class LeaderboardHandler(BaseHandler):
                 'total_workouts': user.total_workouts,
                 'last_workout': str(user.last_workout_date) if user.last_workout_date else None
             })
-
         return self.ok({'leaderboard': leaderboard, 'sort_by': sort_by})
+
 
 class ProgressAnalysisHandler(ProtectedHandler):
     def handle_protected(self):
@@ -256,7 +232,7 @@ class ProgressAnalysisHandler(ProtectedHandler):
         if not m: return self.error('Немає вимірів', 404)
         fu = self._build_fitness_user(m)
         from algorithm import ProgressAnalyzer
-        analysis = ProgressAnalyzer.analyze(fu, data['new_weight']) # У LogWorkoutHandler там data['weight']
+        analysis = ProgressAnalyzer.analyze(fu, data['new_weight'])
         fu.weight = data['new_weight']
         plan = self._save_nutrition_plan(db, fu)
         db.add(UserMeasurement(user_id=self.current_user_id(), date=date.today(),
@@ -285,117 +261,77 @@ class TrackerImportHandler(ProtectedHandler):
             self._save_nutrition_plan(db, fu); db.commit()
         return self.ok({'avg_steps': round(avg), 'activity_level': label, 'new_pal': pal})
 
-class SettingsHandler(ProtectedHandler):###
+
+class SettingsHandler(ProtectedHandler):
     def handle_protected(self):
         data = request.json
         db = self.get_db()
         user = db.query(User).filter_by(id=self.current_user_id()).first()
-
         if not user:
             return self.error('Користувача не знайдено', 404)
-
-        # Якщо користувач передав нове ім'я
         if 'new_username' in data and data['new_username']:
-            # Перевірка, чи не зайняте ім'я
             existing_user = db.query(User).filter_by(username=data['new_username']).first()
             if existing_user and existing_user.id != user.id:
                 return self.error('Це ім\'я вже зайняте іншим користувачем')
             user.username = data['new_username']
-
-        # Якщо користувач передав новий пароль
         if 'new_password' in data and data['new_password']:
             user.password_hash = generate_password_hash(data['new_password'])
-
         db.commit()
         return self.ok({'message': 'Налаштування успішно оновлено!'})
 
 
 # ═══════════════════════════════════════════════════
-# ═══════════════════════════════════════════════════
 # МАРШРУТИ
 # ═══════════════════════════════════════════════════
 
 @app.route('/')
-def dashboard_page():    return render_template_string(HTML_DASHBOARD)
+def dashboard_page():        return render_template('dashboard.html')
 
 @app.route('/login')
-def login_page():        return render_template_string(HTML_LOGIN)
+def login_page():            return render_template('login.html')
 
 @app.route('/register')
-def register_page():     return render_template_string(HTML_REGISTER)
+def register_page():         return render_template('register.html')
 
-@app.route('/exercises')
-def exercises_page():    return render_template_string(HTML_EXERCISES)
+@app.route('/library')
+def library_page():          return render_template('library.html')
 
-@app.route('/api/register',             methods=['POST'])
-def register():          return RegisterHandler().handle()
-
-@app.route('/api/login',                methods=['POST'])
-def login():             return LoginHandler().handle()
-
-@app.route('/api/logout',               methods=['POST'])
-def logout():            return LogoutHandler().handle()
-
-@app.route('/api/profile/measurements', methods=['POST'])
-def save_measurements(): return SaveMeasurementsHandler().handle()
-
-@app.route('/api/workouts/log',         methods=['POST'])
-def log_workout():       return LogWorkoutHandler().handle()
-
-@app.route('/api/progress/analyze',     methods=['POST'])
-def analyze_progress():  return ProgressAnalysisHandler().handle()
-
-@app.route('/api/tracker/import',       methods=['POST'])
-def import_tracker():    return TrackerImportHandler().handle()
-
-@app.route('/api/dashboard',            methods=['GET'])
-def dashboard_api():     return DashboardHandler().handle()
-
-@app.route('/api/leaderboard', methods=['GET'])
-def leaderboard():       return LeaderboardHandler().handle()
-
-# ═══════════════════════════════════════════════════
-# МАРШРУТИ (Оновлено під нові файли)
-# ═══════════════════════════════════════════════════
-
-@app.route('/')
-def dashboard_page():
-    # Замість render_template_string тепер використовуємо render_template
-    return render_template('dashboard.html')
-
-@app.route('/login')
-def login_page():
-    return render_template('login.html')
-
-@app.route('/register')
-def register_page():
-    return render_template('register.html')
-
-@app.route('/library') # Хлопці назвали файл library.html, краще назвати маршрут так само
-def library_page():
-    return render_template('library.html')
-
-@app.route('/calculator') # Додаємо маршрут для їхнього калькулятора
-def calculator_page():
-    return render_template('calculator.html')
+@app.route('/calculator')
+def calculator_page():       return render_template('calculator.html')
 
 @app.route('/settings')
-def settings_page():
-    return render_template('settings.html')
-
-# --- API МАРШРУТИ ЗАЛИШАЄМО БЕЗ ЗМІН! ---
-# Вони відповідають за логіку, базу даних і розрахунки.
+def settings_page():         return render_template('settings.html')
 
 @app.route('/api/register',             methods=['POST'])
-def register():          return RegisterHandler().handle()
+def register():              return RegisterHandler().handle()
 
 @app.route('/api/login',                methods=['POST'])
-def login():             return LoginHandler().handle()
+def login():                 return LoginHandler().handle()
 
 @app.route('/api/logout',               methods=['POST'])
-def logout():            return LogoutHandler().handle()
+def logout():                return LogoutHandler().handle()
 
-# ... і так далі до кінця файлу
+@app.route('/api/profile/measurements', methods=['POST'])
+def save_measurements():     return SaveMeasurementsHandler().handle()
+
+@app.route('/api/workouts/log',         methods=['POST'])
+def log_workout():           return LogWorkoutHandler().handle()
+
+@app.route('/api/progress/analyze',     methods=['POST'])
+def analyze_progress():      return ProgressAnalysisHandler().handle()
+
+@app.route('/api/tracker/import',       methods=['POST'])
+def import_tracker():        return TrackerImportHandler().handle()
+
+@app.route('/api/dashboard',            methods=['GET'])
+def dashboard_api():         return DashboardHandler().handle()
+
+@app.route('/api/leaderboard',          methods=['GET'])
+def leaderboard():           return LeaderboardHandler().handle()
+
+@app.route('/api/settings',             methods=['POST'])
+def settings():              return SettingsHandler().handle()
+
 
 if __name__ == '__main__':
     app.run(debug=True, port=5000)
