@@ -93,7 +93,6 @@ def calculator():
             db.commit()
             db.close()
 
-            # Розраховуємо план через ваш algotitm.py
             user = FitnessUser(name, weight, height, age, gender, goal, pal)
             return render_template("result.html", plan=user.get_full_plan())
 
