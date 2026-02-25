@@ -7,12 +7,10 @@ Base = declarative_base()
 class Workout(Base):
     __tablename__ = 'workouts'
     id = Column(Integer, primary_key=True)
-<<<<<<< HEAD
     date = Column(String)
     type = Column(String)
     duration = Column(Integer)
     load = Column(Float)
-=======
     username = Column(String, unique=True, nullable=False) # Логін
     email = Column(String, unique=True, nullable=False)
     password_hash = Column(String, nullable=False) # Пароль (зашифрований)
@@ -34,7 +32,6 @@ class Workout(Base):
 class UserMeasurement(Base):
     """Тут зберігаємо історію ваги та параметрів для аналізу прогресу"""
     __tablename__ = 'user_measurements'
->>>>>>> origin/new-backend-and-frontend
 
 # Таблиця для збереження даних з калькулятора (профілі)
 class UserProfile(Base):
@@ -48,9 +45,7 @@ class UserProfile(Base):
     goal = Column(String)
     pal = Column(Float)
 
-<<<<<<< HEAD
 # ОСЬ ТУТ ЗМІНЕНО НАЗВУ БАЗИ НА fitness_app.db
-=======
     weight = Column(Float, nullable=False)   # Вага (для формули BMR)
     height = Column(Float, nullable=False)   # Зріст
     age = Column(Integer, nullable=False)    # Вік
@@ -122,7 +117,6 @@ class WorkoutLog(Base):
 # -----------------------------------------------------------
 # 4. Створення файлу бази даних
 # -----------------------------------------------------------
->>>>>>> origin/new-backend-and-frontend
 engine = create_engine('sqlite:///fitness_app.db')
 Base.metadata.create_all(engine)
 Session = sessionmaker(bind=engine)

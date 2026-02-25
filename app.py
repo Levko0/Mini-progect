@@ -1,9 +1,8 @@
-<<<<<<< HEAD
+
 from flask import Flask, render_template, request, redirect, url_for
 from datetime import datetime
-from algotitm import FitnessUser 
+from algotitm import FitnessUser
 from models import Session, Workout, UserProfile # Підключаємо базу даних
-=======
 from collections import defaultdict
 from flask import Flask, render_template, request, jsonify, session
 from flask_cors import CORS
@@ -17,7 +16,6 @@ import csv, io
 from sqlalchemy import func
 from models import Base, User, UserMeasurement, NutritionPlan, Exercise, WorkoutLog, FoodLog
 from algorithm import FitnessUser
->>>>>>> origin/new-backend-and-frontend
 
 app = Flask(__name__)
 
@@ -44,10 +42,10 @@ EXERCISE_DB = {
 def get_stats(db_session):
     # Дістаємо всі тренування з бази даних
     all_workouts = db_session.query(Workout).all()
-    
+
     total_load = sum(w.load for w in all_workouts if w.load)
     count = len(all_workouts)
-    
+
     return {
         "total": round(total_load, 1),
         "count": count,
@@ -66,7 +64,7 @@ def calculate_load(duration, intensity):
 @app.route("/", methods=["GET", "POST"])
 def dashboard():
     db = Session() # Відкриваємо зв'язок з БД
-    
+
     if request.method == "POST":
         # Зберігаємо нове тренування в базу даних
         new_workout = Workout(
@@ -79,12 +77,12 @@ def dashboard():
         db.commit()
         db.close()
         return redirect(url_for("dashboard"))
-    
+
     # Витягуємо тренування (від найновіших до найстаріших)
     workouts = db.query(Workout).order_by(Workout.id.desc()).all()
     stats = get_stats(db)
     db.close()
-    
+
     return render_template("dashboard.html", stats=stats, workouts=workouts, today=datetime.now().strftime('%Y-%m-%d'))
 
 @app.route("/calculator", methods=["GET", "POST"])
@@ -102,7 +100,7 @@ def calculator():
             # Зберігаємо введені користувачем дані в базу даних
             db = Session()
             new_profile = UserProfile(
-                name=name, weight=weight, height=height, age=age, 
+                name=name, weight=weight, height=height, age=age,
                 gender=gender, goal=goal, pal=pal
             )
             db.add(new_profile)
@@ -121,10 +119,8 @@ def calculator():
 def library():
     return render_template("library.html", exercises=EXERCISE_DB)
 
-<<<<<<< HEAD
 if __name__ == "__main__":
     app.run(debug=True, port=5000)
-=======
     # НОВА ФУНКЦІЯ ДЛЯ STREAK
     def _update_streak(self, db, user_id, workout_date):
         """Оновлює streak користувача"""
@@ -375,4 +371,4 @@ def logout():            return LogoutHandler().handle()
 
 if __name__ == '__main__':
     app.run(debug=True, port=5000)
->>>>>>> origin/new-backend-and-frontend
+
