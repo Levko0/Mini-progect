@@ -1,337 +1,109 @@
-from flask import Flask, render_template, request, jsonify, session
-from flask_cors import CORS
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-from werkzeug.security import generate_password_hash, check_password_hash
-from datetime import datetime, date
-import csv, io
-
-from models import Base, User, UserMeasurement, NutritionPlan, Exercise, WorkoutLog
-from algorithm import FitnessUser
+from flask import Flask, render_template, request, redirect, url_for
+from datetime import datetime
+from algotitm import FitnessUser 
+from models import Session, Workout, UserProfile # Підключаємо базу даних
 
 app = Flask(__name__)
-app.secret_key = 'your-secret-key'
-CORS(app, supports_credentials=True)
 
-engine = create_engine('sqlite:///fitness_app.db')
-Base.metadata.create_all(engine)
-DBSession = sessionmaker(bind=engine)
+NEW_IMAGE_URL = "https://tovarystvo-kraftu.com/content/uploads/images/yajtsia-kuriache-tsesarky-perepelyne.png"
 
+EXERCISE_DB = {
+    "Кардіо": [
+        {"name": "Біг", "desc": "Інтервальний біг 30/30 сек.", "img": NEW_IMAGE_URL},
+        {"name": "Велосипед", "desc": "Середній темп 45 хв.", "img": NEW_IMAGE_URL},
+        {"name": "Скакалка", "desc": "Інтенсивні стрибки 15 хв.", "img": NEW_IMAGE_URL}
+    ],
+    "Силові": [
+        {"name": "Жим лежачи", "desc": "3 підходи по 10 повторень.", "img": NEW_IMAGE_URL},
+        {"name": "Присідання", "desc": "4 підходи по 12 повторень.", "img": NEW_IMAGE_URL},
+        {"name": "Тяга штанги", "desc": "3 підходи по 8 повторень.", "img": NEW_IMAGE_URL}
+    ],
+    "Спорт": [
+        {"name": "Волейбол", "desc": "Ігрова практика.", "img": NEW_IMAGE_URL},
+        {"name": "Баскетбол", "desc": "Кидки в кільце 30 хв.", "img": NEW_IMAGE_URL},
+        {"name": "Плавання", "desc": "Кроль 1000м.", "img": NEW_IMAGE_URL}
+    ]
+}
 
-# ═══════════════════════════════════════════════════
-# ООП: БАЗОВІ КЛАСИ
-# ═══════════════════════════════════════════════════
+def get_stats(db_session):
+    # Дістаємо всі тренування з бази даних
+    all_workouts = db_session.query(Workout).all()
+    
+    total_load = sum(w.load for w in all_workouts if w.load)
+    count = len(all_workouts)
+    
+    return {
+        "total": round(total_load, 1),
+        "count": count,
+        "chart_labels": [w.date for w in all_workouts[-7:]],
+        "chart_data": [w.load for w in all_workouts[-7:]]
+    }
 
-class BaseHandler:
-    def get_db(self): return DBSession()
-    def current_user_id(self): return session.get('user_id')
-    def ok(self, data, code=200): return jsonify(data), code
-    def error(self, msg, code=400): return jsonify({'error': msg}), code
-    def handle(self): raise NotImplementedError
+def calculate_load(duration, intensity):
+    try:
+        d = float(duration)
+        i = float(intensity)
+        return round(d * i * 0.1, 1)
+    except:
+        return 0
 
-
-class ProtectedHandler(BaseHandler):
-    def handle(self):
-        if not self.current_user_id():
-            return self.error('Не авторизовано', 401)
-        return self.handle_protected()
-
-    def handle_protected(self): raise NotImplementedError
-
-    def _get_last_measurement(self, db):
-        return (db.query(UserMeasurement)
-                .filter_by(user_id=self.current_user_id())
-                .order_by(UserMeasurement.date.desc()).first())
-
-    def _build_fitness_user(self, m):
-        return FitnessUser('', m.weight, m.height, m.age, m.gender, m.goal, m.activity_level)
-
-    def _save_nutrition_plan(self, db, fu):
-        fu.calculate_nutrition()
-        plan = NutritionPlan(
-            user_id=self.current_user_id(),
-            daily_calories=round(fu.tdee_adj),
-            protein_g=fu.macros.get('protein', 0),
-            fat_g=fu.macros.get('fat', 0),
-            carbs_g=fu.macros.get('carbs', 0)
+@app.route("/", methods=["GET", "POST"])
+def dashboard():
+    db = Session() # Відкриваємо зв'язок з БД
+    
+    if request.method == "POST":
+        # Зберігаємо нове тренування в базу даних
+        new_workout = Workout(
+            date=request.form.get("date"),
+            type=request.form.get("type"),
+            duration=int(request.form.get("duration", 0)),
+            load=calculate_load(request.form.get("duration"), request.form.get("intensity"))
         )
-        db.add(plan)
-        return plan
-
-
-# ═══════════════════════════════════════════════════
-# API HANDLERS
-# ═══════════════════════════════════════════════════
-
-class RegisterHandler(BaseHandler):
-    def handle(self):
-        data = request.json
-        db = self.get_db()
-        if db.query(User).filter_by(email=data['email']).first():
-            return self.error('Email вже зареєстровано')
-        user = User(username=data['username'], email=data['email'],
-                    password_hash=generate_password_hash(data['password']))
-        db.add(user); db.commit()
-        session['user_id'] = user.id
-        return self.ok({'message': 'Реєстрація успішна'}, 201)
-
-
-class LoginHandler(BaseHandler):
-    def handle(self):
-        data = request.json
-        db = self.get_db()
-        user = db.query(User).filter_by(email=data['email']).first()
-        if not user or not check_password_hash(user.password_hash, data['password']):
-            return self.error('Невірний email або пароль', 401)
-        session['user_id'] = user.id
-        return self.ok({'message': 'Вхід успішний'})
-
-
-class LogoutHandler(BaseHandler):
-    def handle(self):
-        session.clear()
-        return self.ok({'message': 'Вийшли'})
-
-
-class SaveMeasurementsHandler(ProtectedHandler):
-    def handle_protected(self):
-        data = request.json
-        db = self.get_db()
-        db.add(UserMeasurement(user_id=self.current_user_id(), date=date.today(),
-            weight=data['weight'], height=data['height'], age=data['age'],
-            gender=data['gender'], activity_level=data.get('activity_level', 1.2), goal=data['goal']))
-        fu = FitnessUser('', data['weight'], data['height'], data['age'],
-                         data['gender'], data['goal'], data.get('activity_level', 1.2))
-        plan = self._save_nutrition_plan(db, fu)
+        db.add(new_workout)
         db.commit()
-        fu.update_training_plan()
-        return self.ok({'daily_calories': plan.daily_calories, 'protein_g': plan.protein_g,
-                        'fat_g': plan.fat_g, 'carbs_g': plan.carbs_g,
-                        'recommendation': fu.training.get('type')}, 201)
+        db.close()
+        return redirect(url_for("dashboard"))
+    
+    # Витягуємо тренування (від найновіших до найстаріших)
+    workouts = db.query(Workout).order_by(Workout.id.desc()).all()
+    stats = get_stats(db)
+    db.close()
+    
+    return render_template("dashboard.html", stats=stats, workouts=workouts, today=datetime.now().strftime('%Y-%m-%d'))
 
+@app.route("/calculator", methods=["GET", "POST"])
+def calculator():
+    if request.method == "POST":
+        try:
+            name = request.form.get("name")
+            weight = float(request.form.get("weight"))
+            height = float(request.form.get("height"))
+            age = int(request.form.get("age"))
+            gender = request.form.get("gender")
+            goal = request.form.get("goal")
+            pal = float(request.form.get("pal"))
 
-class LogWorkoutHandler(ProtectedHandler):
-    def handle_protected(self):
-        data = request.json
-        db = self.get_db()
-        workout = WorkoutLog(
-            user_id=self.current_user_id(),
-            date=datetime.now(),
-            notes=data.get('notes', ''),
-            duration_minutes=data.get('duration_minutes', 0)
-        )
-        db.add(workout)
-        self._update_streak(db, self.current_user_id(), workout.date)
+            # Зберігаємо введені користувачем дані в базу даних
+            db = Session()
+            new_profile = UserProfile(
+                name=name, weight=weight, height=height, age=age, 
+                gender=gender, goal=goal, pal=pal
+            )
+            db.add(new_profile)
+            db.commit()
+            db.close()
 
-        progress = None
-        if 'weight' in data and data['weight']:
-            m = self._get_last_measurement(db)
-            if m:
-                fu = self._build_fitness_user(m)
-                from algorithm import ProgressAnalyzer
-                progress = ProgressAnalyzer.analyze(fu, data['weight'])
-                db.add(UserMeasurement(user_id=self.current_user_id(), date=date.today(),
-                    weight=data['weight'], height=m.height, age=m.age,
-                    gender=m.gender, activity_level=m.activity_level, goal=m.goal))
+            user = FitnessUser(name, weight, height, age, gender, goal, pal)
+            return render_template("result.html", plan=user.get_full_plan())
 
-        db.commit()
-        return self.ok({'message': 'Тренування записано!', 'progress': progress}, 201)
+        except ValueError:
+            return "Помилка! Введіть коректні числа.", 400
 
-    def _update_streak(self, db, user_id, workout_date):
-        user = db.query(User).filter_by(id=user_id).first()
-        if not user:
-            return
-        if isinstance(workout_date, datetime):
-            workout_date = workout_date.date()
-        if user.last_workout_date is None:
-            user.current_streak = 1
-            user.best_streak = 1
-            user.total_workouts = 1
-            user.last_workout_date = workout_date
-            return
-        days_diff = (workout_date - user.last_workout_date).days
-        if days_diff == 0:
-            user.total_workouts += 1
-        elif days_diff == 1:
-            user.current_streak += 1
-            user.total_workouts += 1
-            user.last_workout_date = workout_date
-            if user.current_streak > user.best_streak:
-                user.best_streak = user.current_streak
-        else:
-            user.current_streak = 1
-            user.total_workouts += 1
-            user.last_workout_date = workout_date
+    return render_template("calculator.html")
 
+@app.route("/library")
+def library():
+    return render_template("library.html", exercises=EXERCISE_DB)
 
-class DashboardHandler(ProtectedHandler):
-    def handle_protected(self):
-        db = self.get_db()
-        uid = self.current_user_id()
-        user = db.query(User).filter_by(id=uid).first()
-        m = self._get_last_measurement(db)
-        plan = (db.query(NutritionPlan).filter_by(user_id=uid)
-                .order_by(NutritionPlan.created_at.desc()).first())
-        workouts = (db.query(WorkoutLog).filter_by(user_id=uid)
-                    .order_by(WorkoutLog.date.desc()).limit(5).all())
-        workouts_count = db.query(WorkoutLog).filter_by(user_id=uid).count()
-
-        training_rec, overtraining = None, None
-        if m:
-            fu = self._build_fitness_user(m)
-            fu.update_training_plan()
-            training_rec = fu.training.get('type')
-
-        return self.ok({
-            'user': user.username,
-            'measurement': {'weight': m.weight, 'goal': m.goal} if m else None,
-            'plan': {'daily_calories': plan.daily_calories, 'protein_g': plan.protein_g,
-                     'fat_g': plan.fat_g, 'carbs_g': plan.carbs_g} if plan else None,
-            'workouts': [{'date': str(w.date)[:10], 'notes': w.notes,
-                          'duration': w.duration_minutes} for w in workouts],
-            'total_workouts': workouts_count,
-            'recommendation': training_rec,
-            'overtraining': overtraining
-        })
-
-
-class LeaderboardHandler(BaseHandler):
-    def handle(self):
-        sort_by = request.args.get('sort_by', 'current_streak')
-        limit = int(request.args.get('limit', 10))
-        db = self.get_db()
-        if sort_by == 'best_streak':
-            order_field = User.best_streak
-        elif sort_by == 'total_workouts':
-            order_field = User.total_workouts
-        else:
-            order_field = User.current_streak
-        top_users = (db.query(User)
-                     .filter(User.total_workouts > 0)
-                     .order_by(order_field.desc())
-                     .limit(limit)
-                     .all())
-        leaderboard = []
-        for rank, user in enumerate(top_users, start=1):
-            leaderboard.append({
-                'rank': rank,
-                'username': user.username,
-                'current_streak': user.current_streak,
-                'best_streak': user.best_streak,
-                'total_workouts': user.total_workouts,
-                'last_workout': str(user.last_workout_date) if user.last_workout_date else None
-            })
-        return self.ok({'leaderboard': leaderboard, 'sort_by': sort_by})
-
-
-class ProgressAnalysisHandler(ProtectedHandler):
-    def handle_protected(self):
-        data = request.json
-        db = self.get_db()
-        m = self._get_last_measurement(db)
-        if not m: return self.error('Немає вимірів', 404)
-        fu = self._build_fitness_user(m)
-        from algorithm import ProgressAnalyzer
-        analysis = ProgressAnalyzer.analyze(fu, data['new_weight'])
-        fu.weight = data['new_weight']
-        plan = self._save_nutrition_plan(db, fu)
-        db.add(UserMeasurement(user_id=self.current_user_id(), date=date.today(),
-            weight=data['new_weight'], height=m.height, age=m.age,
-            gender=m.gender, activity_level=m.activity_level, goal=m.goal))
-        db.commit()
-        return self.ok({'analysis': analysis, 'delta': round(data['new_weight'] - m.weight, 1),
-                        'new_calories': plan.daily_calories})
-
-
-class TrackerImportHandler(ProtectedHandler):
-    def handle_protected(self):
-        if 'file' not in request.files: return self.error('Файл не знайдено')
-        content = request.files['file'].read().decode('utf-8')
-        records = [{'steps': int(r['steps']), 'active_calories': float(r['active_calories'])}
-                   for r in csv.DictReader(io.StringIO(content))]
-        if not records: return self.error('CSV порожній')
-        avg = sum(r['steps'] for r in records) / len(records)
-        pal, label = (1.725, 'Дуже активний') if avg >= 12000 else \
-                     (1.55,  'Помірно активний') if avg >= 10000 else \
-                     (1.375, 'Легка активність') if avg >= 7500 else (1.2, 'Малоактивний')
-        db = self.get_db()
-        m = self._get_last_measurement(db)
-        if m:
-            fu = self._build_fitness_user(m); fu.pal = pal
-            self._save_nutrition_plan(db, fu); db.commit()
-        return self.ok({'avg_steps': round(avg), 'activity_level': label, 'new_pal': pal})
-
-
-class SettingsHandler(ProtectedHandler):
-    def handle_protected(self):
-        data = request.json
-        db = self.get_db()
-        user = db.query(User).filter_by(id=self.current_user_id()).first()
-        if not user:
-            return self.error('Користувача не знайдено', 404)
-        if 'new_username' in data and data['new_username']:
-            existing_user = db.query(User).filter_by(username=data['new_username']).first()
-            if existing_user and existing_user.id != user.id:
-                return self.error('Це ім\'я вже зайняте іншим користувачем')
-            user.username = data['new_username']
-        if 'new_password' in data and data['new_password']:
-            user.password_hash = generate_password_hash(data['new_password'])
-        db.commit()
-        return self.ok({'message': 'Налаштування успішно оновлено!'})
-
-
-# ═══════════════════════════════════════════════════
-# МАРШРУТИ
-# ═══════════════════════════════════════════════════
-
-@app.route('/')
-def dashboard_page():        return render_template('dashboard.html')
-
-@app.route('/login')
-def login_page():            return render_template('login.html')
-
-@app.route('/register')
-def register_page():         return render_template('register.html')
-
-@app.route('/library')
-def library_page():          return render_template('library.html')
-
-@app.route('/calculator')
-def calculator_page():       return render_template('calculator.html')
-
-@app.route('/settings')
-def settings_page():         return render_template('settings.html')
-
-@app.route('/api/register',             methods=['POST'])
-def register():              return RegisterHandler().handle()
-
-@app.route('/api/login',                methods=['POST'])
-def login():                 return LoginHandler().handle()
-
-@app.route('/api/logout',               methods=['POST'])
-def logout():                return LogoutHandler().handle()
-
-@app.route('/api/profile/measurements', methods=['POST'])
-def save_measurements():     return SaveMeasurementsHandler().handle()
-
-@app.route('/api/workouts/log',         methods=['POST'])
-def log_workout():           return LogWorkoutHandler().handle()
-
-@app.route('/api/progress/analyze',     methods=['POST'])
-def analyze_progress():      return ProgressAnalysisHandler().handle()
-
-@app.route('/api/tracker/import',       methods=['POST'])
-def import_tracker():        return TrackerImportHandler().handle()
-
-@app.route('/api/dashboard',            methods=['GET'])
-def dashboard_api():         return DashboardHandler().handle()
-
-@app.route('/api/leaderboard',          methods=['GET'])
-def leaderboard():           return LeaderboardHandler().handle()
-
-@app.route('/api/settings',             methods=['POST'])
-def settings():              return SettingsHandler().handle()
-
-
-if __name__ == '__main__':
+if __name__ == "__main__":
     app.run(debug=True, port=5000)
