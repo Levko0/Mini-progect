@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <title>Результат аналізу</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body class="bg-light">
+
+<nav class="navbar navbar-dark bg-primary mb-4">
+  <div class="container">
+    <a class="navbar-brand fw-bold" href="/">ActiveTracker</a>
+  </div>
+</nav>
+
+<div class="container" style="max-width: 600px;">
+    <div class="card border-0 shadow-sm p-4">
+        <h4 class="mb-3">
+            {% if change_needed %}Рекомендуємо скоригувати план{% else %}Аналіз завершено{% endif %}
+        </h4>
+
+        {% if change_needed %}
+        <div class="alert alert-warning">
+            <strong>Програму тренувань оновлено</strong> на основі твого прогресу.
+            Новий план вже доступний на дашборді.
+        </div>
+        {% else %}
+        <div class="alert alert-success">
+            <strong>Все йде за планом!</strong> Продовжуй у тому ж темпі.
+        </div>
+        {% endif %}
+
+        <div class="p-3 bg-light rounded mb-4" style="white-space: pre-line; font-size: 15px; line-height: 1.8;">
+            {{ recommendation }}
+        </div>
+
+        <div class="d-flex gap-2">
+            <a href="/" class="btn btn-primary flex-fill">На дашборд</a>
+            <a href="/calculator" class="btn btn-outline-secondary">Перерахувати план</a>
+        </div>
+    </div>
+</div>
+</body>
+</html>
