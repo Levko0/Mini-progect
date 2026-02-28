@@ -1,7 +1,8 @@
-from flask import Flask, render_template, request, redirect, url_for
+from flask import Flask, render_template, request, redirect, url_for, jsonify
 from datetime import datetime
-from algorithm import FitnessUser 
-from models import Session, Workout, UserProfile # Підключаємо базу даних
+from algorithm import FitnessUser
+from models import Session, Workout, UserProfile
+import csv, io
 
 app = Flask(__name__)
 
@@ -25,13 +26,26 @@ EXERCISE_DB = {
     ]
 }
 
+# Відповідність назв типів тренувань (для підтримки різних трекерів)
+TYPE_ALIASES = {
+    "run": "Біг", "running": "Біг", "біг": "Біг", "бег": "Біг",
+    "gym": "Зал", "strength": "Зал", "зал": "Зал", "силове": "Зал", "weightlifting": "Зал",
+    "sport": "Спорт", "спорт": "Спорт", "game": "Спорт",
+    "cycling": "Велосипед", "bike": "Велосипед", "велосипед": "Велосипед",
+    "swimming": "Спорт", "swim": "Спорт", "плавання": "Спорт",
+    "walking": "Біг", "walk": "Біг", "ходьба": "Біг",
+}
+
+def normalize_type(raw):
+    """Нормалізує назву типу тренування з будь-якого трекера."""
+    if not raw:
+        return "Спорт"
+    return TYPE_ALIASES.get(raw.strip().lower(), raw.strip().capitalize())
+
 def get_stats(db_session):
-    # Дістаємо всі тренування з бази даних
     all_workouts = db_session.query(Workout).all()
-    
     total_load = sum(w.load for w in all_workouts if w.load)
     count = len(all_workouts)
-    
     return {
         "total": round(total_load, 1),
         "count": count,
@@ -41,18 +55,16 @@ def get_stats(db_session):
 
 def calculate_load(duration, intensity):
     try:
-        d = float(duration)
-        i = float(intensity)
-        return round(d * i * 0.1, 1)
+        return round(float(duration) * float(intensity) * 0.1, 1)
     except:
         return 0
 
+# ─── DASHBOARD ────────────────────────────────────────────────────────────────
+
 @app.route("/", methods=["GET", "POST"])
 def dashboard():
-    db = Session() # Відкриваємо зв'язок з БД
-    
+    db = Session()
     if request.method == "POST":
-        # Зберігаємо нове тренування в базу даних
         new_workout = Workout(
             date=request.form.get("date"),
             type=request.form.get("type"),
@@ -63,13 +75,102 @@ def dashboard():
         db.commit()
         db.close()
         return redirect(url_for("dashboard"))
-    
-    # Витягуємо тренування (від найновіших до найстаріших)
+
     workouts = db.query(Workout).order_by(Workout.id.desc()).all()
     stats = get_stats(db)
     db.close()
-    
     return render_template("dashboard.html", stats=stats, workouts=workouts, today=datetime.now().strftime('%Y-%m-%d'))
+
+# ─── CSV IMPORT ───────────────────────────────────────────────────────────────
+
+@app.route("/import-csv", methods=["POST"])
+def import_csv():
+    """
+    Приймає CSV файл і зберігає тренування в базу даних.
+
+    Підтримує колонки (будь-який порядок, автодетектування):
+      - date / дата / day
+      - type / тип / activity / sport
+      - duration / minutes / хвилини / час / min
+      - intensity / інтенсивність / level  (необов'язково, default=3)
+
+    Повертає JSON: { imported: N, errors: [...] }
+    """
+    if "file" not in request.files:
+        return jsonify({"error": "Файл не знайдено"}), 400
+
+    file = request.files["file"]
+    if not file.filename.endswith((".csv", ".txt")):
+        return jsonify({"error": "Підтримуються лише .csv або .txt файли"}), 400
+
+    content = file.read().decode("utf-8-sig", errors="replace")  # utf-8-sig знімає BOM
+
+    # Автодетектування роздільника
+    dialect = csv.Sniffer().sniff(content[:1024], delimiters=",;\t")
+    reader = csv.DictReader(io.StringIO(content), dialect=dialect)
+
+    # Нормалізуємо заголовки (lowercase, trim)
+    raw_headers = reader.fieldnames or []
+    header_map = {h.strip().lower(): h for h in raw_headers}
+
+    def find_col(*variants):
+        """Знаходить колонку за можливими варіантами назви."""
+        for v in variants:
+            if v in header_map:
+                return header_map[v]
+        return None
+
+    col_date      = find_col("date", "дата", "day", "д")
+    col_type      = find_col("type", "тип", "activity", "sport", "активність", "вид")
+    col_duration  = find_col("duration", "duration_minutes", "minutes", "хвилини", "час", "min", "тривалість")
+    col_intensity = find_col("intensity", "інтенсивність", "level", "рівень", "effort")
+
+    if not col_date or not col_duration:
+        return jsonify({
+            "error": "Не знайдено обов'язкових колонок (date, duration). "
+                     f"Знайдені колонки: {', '.join(raw_headers)}"
+        }), 400
+
+    imported = 0
+    errors = []
+    db = Session()
+
+    for i, row in enumerate(reader, start=2):  # рядок 1 = заголовок
+        try:
+            raw_date     = row.get(col_date, "").strip()
+            raw_type     = row.get(col_type, "Спорт").strip() if col_type else "Спорт"
+            raw_duration = row.get(col_duration, "").strip()
+            raw_intensity = row.get(col_intensity, "3").strip() if col_intensity else "3"
+
+            if not raw_date or not raw_duration:
+                errors.append(f"Рядок {i}: порожня дата або тривалість — пропущено")
+                continue
+
+            duration  = float(raw_duration)
+            intensity = max(1.0, min(5.0, float(raw_intensity) if raw_intensity else 3.0))
+            workout_type = normalize_type(raw_type)
+            load = calculate_load(duration, intensity)
+
+            db.add(Workout(
+                date=raw_date,
+                type=workout_type,
+                duration=int(duration),
+                load=load
+            ))
+            imported += 1
+
+        except Exception as e:
+            errors.append(f"Рядок {i}: {str(e)}")
+
+    db.commit()
+    db.close()
+
+    return jsonify({
+        "imported": imported,
+        "errors": errors[:10]  # максимум 10 помилок у відповіді
+    })
+
+# ─── CALCULATOR ───────────────────────────────────────────────────────────────
 
 @app.route("/calculator", methods=["GET", "POST"])
 def calculator():
@@ -83,10 +184,9 @@ def calculator():
             goal = request.form.get("goal")
             pal = float(request.form.get("pal"))
 
-            # Зберігаємо введені користувачем дані в базу даних
             db = Session()
             new_profile = UserProfile(
-                name=name, weight=weight, height=height, age=age, 
+                name=name, weight=weight, height=height, age=age,
                 gender=gender, goal=goal, pal=pal
             )
             db.add(new_profile)
@@ -100,6 +200,8 @@ def calculator():
             return "Помилка! Введіть коректні числа.", 400
 
     return render_template("calculator.html")
+
+# ─── LIBRARY ─────────────────────────────────────────────────────────────────
 
 @app.route("/library")
 def library():
