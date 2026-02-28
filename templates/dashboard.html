@@ -5,53 +5,21 @@
     <title>Дашборд</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <style>
-        /* ── CSV Import Modal ── */
-        .drop-zone {
-            border: 2px dashed #c5d3f0;
-            border-radius: 10px;
-            padding: 36px 24px;
-            text-align: center;
-            cursor: pointer;
-            transition: all .2s ease;
-            background: #f8faff;
-        }
-        .drop-zone:hover, .drop-zone.drag-over {
-            border-color: #0d6efd;
-            background: #eff4ff;
-        }
+        .drop-zone { border: 2px dashed #c5d3f0; border-radius: 10px; padding: 36px 24px;
+                     text-align: center; cursor: pointer; transition: all .2s; background: #f8faff; }
+        .drop-zone:hover, .drop-zone.drag-over { border-color: #0d6efd; background: #eff4ff; }
         .drop-zone svg { color: #0d6efd; margin-bottom: 10px; }
-        .drop-zone p  { color: #888; font-size: 13px; margin-bottom: 14px; }
-
-        #importProgress { display: none; }
-        #importResult   { display: none; }
-        #importError    { display: none; }
-
-        .step-badge {
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            width: 22px; height: 22px;
-            border-radius: 50%;
-            background: #0d6efd;
-            color: #fff;
-            font-size: 11px;
-            font-weight: 700;
-            margin-right: 6px;
-            flex-shrink: 0;
-        }
-
-        /* Template download link */
-        .template-link {
-            font-size: 12px;
-            color: #0d6efd;
-            cursor: pointer;
-            text-decoration: underline dotted;
-        }
+        .drop-zone p { color: #888; font-size: 13px; margin-bottom: 14px; }
+        #importProgress, #importResult, #importError { display: none; }
+        .template-link { font-size: 12px; color: #0d6efd; cursor: pointer; text-decoration: underline dotted; }
+        .plan-day { border-left: 3px solid #0d6efd; padding: 8px 12px; margin-bottom: 8px; background: #f8faff; border-radius: 0 8px 8px 0; }
+        .plan-day.cardio { border-color: #198754; }
+        .plan-day.gym    { border-color: #0d6efd; }
+        .plan-day.sport  { border-color: #fd7e14; }
     </style>
 </head>
 <body class="bg-light">
 
-<!-- ── NAVBAR ── -->
 <nav class="navbar navbar-expand-lg navbar-dark bg-primary mb-4">
   <div class="container">
     <a class="navbar-brand fw-bold" href="/">ActiveTracker</a>
@@ -59,8 +27,8 @@
         <a class="nav-link active fw-bold" href="/">Дашборд</a>
         <a class="nav-link" href="/calculator">Калькулятор</a>
         <a class="nav-link" href="/library">Бібліотека</a>
+        <a class="nav-link" href="/checkin">📏 Замір</a>
     </div>
-    <!-- Кнопка імпорту в navbar -->
     <div class="ms-auto">
         <button class="btn btn-outline-light btn-sm" data-bs-toggle="modal" data-bs-target="#csvImportModal">
             ⬆ Імпорт CSV
@@ -69,8 +37,32 @@
   </div>
 </nav>
 
-<!-- ── DASHBOARD CONTENT ── -->
 <div class="container">
+
+    <!-- Flash повідомлення -->
+    {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+        {% for cat, msg in messages %}
+        <div class="alert alert-{{ cat }} alert-dismissible fade show" role="alert">
+            {{ msg }}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+        {% endfor %}
+    {% endif %}
+    {% endwith %}
+
+    <!-- Нагадування про замір -->
+    {% if checkin_days == 0 %}
+    <div class="alert alert-warning d-flex align-items-center justify-content-between mb-4">
+        <span>📏 <strong>Час для контрольного заміру!</strong> Пройшло 2 тижні — перевір свій прогрес.</span>
+        <a href="/checkin" class="btn btn-warning btn-sm ms-3">Зробити замір →</a>
+    </div>
+    {% elif checkin_days <= 3 %}
+    <div class="alert alert-info d-flex align-items-center justify-content-between mb-4">
+        <span>📅 До наступного заміру залишилось <strong>{{ checkin_days }} дн.</strong></span>
+        <a href="/checkin" class="btn btn-outline-info btn-sm ms-3">Зробити зараз</a>
+    </div>
+    {% endif %}
 
     <!-- Stats -->
     <div class="row mb-4">
@@ -94,10 +86,10 @@
         <canvas id="chart" height="80"></canvas>
     </div>
 
-    <!-- Add + History -->
     <div class="row">
+        <!-- Ліва колонка -->
         <div class="col-md-4 mb-3">
-            <div class="card p-3 shadow-sm border-0">
+            <div class="card p-3 shadow-sm border-0 mb-3">
                 <h5>Додати тренування</h5>
                 <form method="POST">
                     <input type="date" name="date" class="form-control mb-2" value="{{ today }}" required>
@@ -105,13 +97,12 @@
                         <option value="Біг">Біг</option>
                         <option value="Зал">Зал</option>
                         <option value="Спорт">Спорт</option>
+                        <option value="Велосипед">Велосипед</option>
                     </select>
                     <input type="number" name="duration" class="form-control mb-2" placeholder="Хвилини" required>
                     <input type="number" name="intensity" class="form-control mb-2" placeholder="Інтенсивність (1-5)" min="1" max="5" required>
-                    <button class="btn btn-primary w-100">Зберегти</button>
+                    <button class="btn btn-primary w-100">Зберегти і заповнити відгук →</button>
                 </form>
-
-                <!-- Підказка про імпорт -->
                 <hr class="my-3">
                 <div class="text-center">
                     <small class="text-muted d-block mb-2">Маєте дані з Garmin / Strava?</small>
@@ -120,23 +111,57 @@
                     </button>
                 </div>
             </div>
+
+            <!-- Програма тренувань -->
+            {% if plan_data %}
+            <div class="card p-3 shadow-sm border-0">
+                <h6 class="fw-bold mb-1">📋 Твоя програма</h6>
+                <small class="text-muted d-block mb-3">{{ plan_data.description }}</small>
+                {% for day in plan_data.schedule %}
+                <div class="plan-day {{ 'cardio' if 'Кардіо' in day.type else 'gym' if 'Зал' in day.type else 'sport' }}">
+                    <div class="fw-semibold" style="font-size:13px;">{{ day.day }} · {{ day.duration }} хв</div>
+                    <div style="font-size:11px; color:#666;">{{ day.exercises[0] }}{% if day.exercises|length > 1 %} + ще {{ day.exercises|length - 1 }}{% endif %}</div>
+                </div>
+                {% endfor %}
+                <a href="/calculator" class="btn btn-outline-secondary btn-sm w-100 mt-2">Оновити план</a>
+            </div>
+            {% else %}
+            <div class="card p-3 shadow-sm border-0 text-center">
+                <p class="text-muted mb-2" style="font-size:13px;">Програму тренувань ще не створено</p>
+                <a href="/calculator" class="btn btn-outline-primary btn-sm">Створити програму →</a>
+            </div>
+            {% endif %}
         </div>
 
+        <!-- Права колонка — Історія -->
         <div class="col-md-8">
             <div class="card p-3 shadow-sm border-0">
                 <h5>Історія</h5>
                 <table class="table table-hover">
-                    <thead><tr><th>Дата</th><th>Тип</th><th>Час</th><th>Load</th></tr></thead>
+                    <thead><tr><th>Дата</th><th>Тип</th><th>Час</th><th>Load</th><th>Відгук</th></tr></thead>
                     <tbody>
-                        {% for w in workouts[::-1] %}
+                        {% for w in workouts %}
                         <tr>
-                            <td>{{ w.date }}</td>
-                            <td><span class="badge bg-secondary">{{ w.type }}</span></td>
-                            <td>{{ w.duration }} хв</td>
-                            <td><strong>{{ w.load }}</strong></td>
+                            <td>{{ w.date | string | truncate(10, True, '') }}</td>
+                            <td><span class="badge bg-secondary">{{ w.notes or '—' }}</span></td>
+                            <td>{{ w.duration_minutes }} хв</td>
+                            <td><strong>{{ (w.duration_minutes * 0.3) | round(1) }}</strong></td>
+                            <td>
+                                {% if w.feedback %}
+                                    <span title="{{ w.feedback.exercises_done }}">
+                                        {% if w.feedback.feeling == 5 %}💪
+                                        {% elif w.feedback.feeling == 4 %}😊
+                                        {% elif w.feedback.feeling == 3 %}😐
+                                        {% elif w.feedback.feeling == 2 %}😕
+                                        {% else %}😫{% endif %}
+                                    </span>
+                                {% else %}
+                                    <a href="/workout-feedback/{{ w.id }}" class="btn btn-outline-secondary btn-sm py-0" style="font-size:11px;">+ відгук</a>
+                                {% endif %}
+                            </td>
                         </tr>
                         {% else %}
-                        <tr><td colspan="4" class="text-center text-muted">Історія пуста</td></tr>
+                        <tr><td colspan="5" class="text-center text-muted">Історія пуста</td></tr>
                         {% endfor %}
                     </tbody>
                 </table>
@@ -145,21 +170,15 @@
     </div>
 </div>
 
-<!-- ══════════════════════════════════════════════════
-     CSV IMPORT MODAL
-══════════════════════════════════════════════════ -->
-<div class="modal fade" id="csvImportModal" tabindex="-1" aria-labelledby="csvImportLabel" aria-hidden="true">
+<!-- CSV IMPORT MODAL -->
+<div class="modal fade" id="csvImportModal" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog modal-lg modal-dialog-centered">
     <div class="modal-content border-0 shadow">
-
       <div class="modal-header bg-primary text-white">
-        <h5 class="modal-title" id="csvImportLabel">⬆ Імпорт тренувань з CSV</h5>
+        <h5 class="modal-title">⬆ Імпорт тренувань з CSV</h5>
         <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
       </div>
-
       <div class="modal-body p-4">
-
-        <!-- Крок 1: Drop zone -->
         <div id="stepUpload">
           <div class="drop-zone" id="dropZone" onclick="document.getElementById('csvFileInput').click()">
             <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
@@ -168,191 +187,104 @@
               <line x1="12" y1="3" x2="12" y2="15"/>
             </svg>
             <p>Перетягніть CSV файл сюди або натисніть, щоб вибрати</p>
-            <button class="btn btn-primary btn-sm" onclick="event.stopPropagation(); document.getElementById('csvFileInput').click()">
-              Вибрати файл
-            </button>
+            <button class="btn btn-primary btn-sm" onclick="event.stopPropagation(); document.getElementById('csvFileInput').click()">Вибрати файл</button>
           </div>
           <input type="file" id="csvFileInput" accept=".csv,.txt" style="display:none">
-
-          <!-- Формат підказка -->
           <div class="mt-3 p-3 bg-light rounded" style="font-size:13px;">
             <div class="d-flex justify-content-between align-items-center mb-2">
               <strong>Очікуваний формат CSV:</strong>
               <span class="template-link" onclick="downloadTemplate()">⬇ Завантажити шаблон</span>
             </div>
-            <code style="font-size:12px; color:#555;">
-              date,type,duration_minutes,intensity<br>
-              2026-02-22,running,60,3<br>
-              2026-02-25,gym,45,4
-            </code>
-            <div class="mt-2 text-muted" style="font-size:12px;">
-              Підтримуються: <strong>Garmin, Strava, Apple Health, Polar, Nike Run Club</strong> та будь-який CSV з колонками дати і тривалості.
-            </div>
+            <code style="font-size:12px; color:#555;">date,type,duration_minutes,intensity<br>2026-02-22,running,60,3</code>
           </div>
         </div>
-
-        <!-- Крок 2: Прогрес -->
         <div id="importProgress">
           <div class="text-center mb-3">
             <div class="spinner-border text-primary mb-2" role="status"></div>
-            <p class="text-muted mb-1">Завантаження та обробка файлу...</p>
-            <small id="importFileName" class="text-secondary"></small>
+            <p class="text-muted mb-1">Обробка файлу...</p>
           </div>
-          <div class="progress">
-            <div class="progress-bar progress-bar-striped progress-bar-animated bg-primary" style="width:100%"></div>
-          </div>
+          <div class="progress"><div class="progress-bar progress-bar-striped progress-bar-animated bg-primary" style="width:100%"></div></div>
         </div>
-
-        <!-- Результат: успіх -->
         <div id="importResult" class="alert alert-success d-flex align-items-start gap-3 mb-0" role="alert">
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0;margin-top:2px;"><polyline points="20 6 9 17 4 12"/></svg>
-          <div>
-            <strong id="importResultTitle"></strong><br>
-            <span id="importResultText" style="font-size:13px;"></span>
-            <div id="importResultErrors" style="font-size:12px;color:#856404;margin-top:6px;"></div>
-          </div>
+          <div><strong id="importResultTitle"></strong><br><span id="importResultText" style="font-size:13px;"></span>
+          <div id="importResultErrors" style="font-size:12px;color:#856404;margin-top:6px;"></div></div>
         </div>
-
-        <!-- Результат: помилка -->
         <div id="importError" class="alert alert-danger mb-0" role="alert">
           <strong>Помилка імпорту</strong>
           <div id="importErrorText" style="font-size:13px;margin-top:4px;"></div>
         </div>
-
       </div>
-
-      <div class="modal-footer" id="modalFooter">
+      <div class="modal-footer">
         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Закрити</button>
-        <button type="button" class="btn btn-primary" id="doImportBtn" style="display:none" onclick="doImport()">
-          Імпортувати
-        </button>
-        <button type="button" class="btn btn-success" id="reloadBtn" style="display:none" onclick="location.reload()">
-          ✓ Оновити дашборд
-        </button>
+        <button type="button" class="btn btn-primary" id="doImportBtn" style="display:none" onclick="doImport()">Імпортувати</button>
+        <button type="button" class="btn btn-success" id="reloadBtn" style="display:none" onclick="location.reload()">✓ Оновити дашборд</button>
       </div>
-
     </div>
   </div>
 </div>
 
-<!-- ── SCRIPTS ── -->
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
-// ── Chart ──────────────────────────────────────────────────────────────────
 const ctx = document.getElementById('chart');
 if (ctx) {
     new Chart(ctx, {
         type: 'line',
         data: {
             labels: {{ stats.chart_labels | tojson }},
-            datasets: [{
-                label: 'Навантаження',
-                data: {{ stats.chart_data | tojson }},
-                borderColor: '#0d6efd',
-                backgroundColor: 'rgba(13, 110, 253, 0.1)',
-                tension: 0.3,
-                fill: true
-            }]
+            datasets: [{ label: 'Навантаження', data: {{ stats.chart_data | tojson }},
+                borderColor: '#0d6efd', backgroundColor: 'rgba(13,110,253,0.1)', tension: 0.3, fill: true }]
         },
-        options: {
-            plugins: { legend: { display: false } },
-            scales: { y: { beginAtZero: true } }
-        }
+        options: { plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } }
     });
 }
 
-// ── CSV Import ─────────────────────────────────────────────────────────────
 let selectedFile = null;
-
-// Drag & drop
 const dz = document.getElementById('dropZone');
 dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('drag-over'); });
 dz.addEventListener('dragleave', () => dz.classList.remove('drag-over'));
-dz.addEventListener('drop', e => {
-    e.preventDefault();
-    dz.classList.remove('drag-over');
-    if (e.dataTransfer.files[0]) setFile(e.dataTransfer.files[0]);
-});
-
-document.getElementById('csvFileInput').addEventListener('change', e => {
-    if (e.target.files[0]) setFile(e.target.files[0]);
-});
+dz.addEventListener('drop', e => { e.preventDefault(); dz.classList.remove('drag-over'); if (e.dataTransfer.files[0]) setFile(e.dataTransfer.files[0]); });
+document.getElementById('csvFileInput').addEventListener('change', e => { if (e.target.files[0]) setFile(e.target.files[0]); });
 
 function setFile(file) {
     selectedFile = file;
-    // Показати назву файлу і кнопку імпорту
     dz.style.borderColor = '#0d6efd';
-    dz.querySelector('p').textContent = `✓ Обрано: ${file.name}`;
+    dz.querySelector('p').textContent = '✓ Обрано: ' + file.name;
     document.getElementById('doImportBtn').style.display = 'inline-block';
     hideResults();
 }
-
 function hideResults() {
-    document.getElementById('importResult').style.display = 'none';
-    document.getElementById('importError').style.display  = 'none';
-    document.getElementById('reloadBtn').style.display    = 'none';
+    ['importResult','importError','reloadBtn'].forEach(id => document.getElementById(id).style.display = 'none');
 }
-
 function doImport() {
     if (!selectedFile) return;
-
-    // Показати прогрес
-    document.getElementById('stepUpload').style.display  = 'none';
+    document.getElementById('stepUpload').style.display = 'none';
     document.getElementById('importProgress').style.display = 'block';
-    document.getElementById('importFileName').textContent = selectedFile.name;
-    document.getElementById('doImportBtn').style.display  = 'none';
+    document.getElementById('doImportBtn').style.display = 'none';
     hideResults();
-
-    const formData = new FormData();
-    formData.append('file', selectedFile);
-
-    fetch('/import-csv', {
-        method: 'POST',
-        body: formData
-    })
-    .then(r => r.json())
-    .then(data => {
+    const fd = new FormData();
+    fd.append('file', selectedFile);
+    fetch('/import-csv', { method: 'POST', body: fd })
+    .then(r => r.json()).then(data => {
         document.getElementById('importProgress').style.display = 'none';
-        document.getElementById('stepUpload').style.display     = 'block';
-
-        if (data.error) {
-            // Загальна помилка
-            document.getElementById('importError').style.display = 'block';
-            document.getElementById('importErrorText').textContent = data.error;
-            return;
-        }
-
-        // Успіх
+        document.getElementById('stepUpload').style.display = 'block';
+        if (data.error) { document.getElementById('importError').style.display = 'block'; document.getElementById('importErrorText').textContent = data.error; return; }
         document.getElementById('importResult').style.display = 'flex';
-        document.getElementById('importResultTitle').textContent =
-            `Імпортовано ${data.imported} тренувань!`;
-        document.getElementById('importResultText').textContent =
-            'Дані збережено в базу. Оновіть сторінку, щоб побачити їх на дашборді.';
-
-        if (data.errors && data.errors.length > 0) {
-            document.getElementById('importResultErrors').innerHTML =
-                '⚠ Деякі рядки пропущено:<br>' +
-                data.errors.map(e => `• ${e}`).join('<br>');
-        }
-
+        document.getElementById('importResultTitle').textContent = `Імпортовано ${data.imported} тренувань!`;
+        document.getElementById('importResultText').textContent = 'Оновіть сторінку, щоб побачити їх на дашборді.';
+        if (data.errors?.length) document.getElementById('importResultErrors').innerHTML = '⚠ Пропущено:<br>' + data.errors.map(e=>'• '+e).join('<br>');
         document.getElementById('reloadBtn').style.display = 'inline-block';
-        // Скидаємо файл
-        selectedFile = null;
-        document.getElementById('csvFileInput').value = '';
-    })
-    .catch(err => {
+        selectedFile = null; document.getElementById('csvFileInput').value = '';
+    }).catch(err => {
         document.getElementById('importProgress').style.display = 'none';
-        document.getElementById('stepUpload').style.display     = 'block';
-        document.getElementById('importError').style.display    = 'block';
-        document.getElementById('importErrorText').textContent  = 'Помилка зв\'язку з сервером: ' + err.message;
+        document.getElementById('stepUpload').style.display = 'block';
+        document.getElementById('importError').style.display = 'block';
+        document.getElementById('importErrorText').textContent = 'Помилка: ' + err.message;
     });
 }
-
-// Скидаємо стан модалки при закритті
 document.getElementById('csvImportModal').addEventListener('hidden.bs.modal', () => {
-    selectedFile = null;
-    document.getElementById('csvFileInput').value = '';
+    selectedFile = null; document.getElementById('csvFileInput').value = '';
     document.getElementById('stepUpload').style.display = 'block';
     document.getElementById('importProgress').style.display = 'none';
     document.getElementById('doImportBtn').style.display = 'none';
@@ -360,14 +292,10 @@ document.getElementById('csvImportModal').addEventListener('hidden.bs.modal', ()
     dz.querySelector('p').textContent = 'Перетягніть CSV файл сюди або натисніть, щоб вибрати';
     hideResults();
 });
-
-// Шаблон для завантаження
 function downloadTemplate() {
-    const csv = 'date,type,duration_minutes,intensity\n2026-02-22,running,60,3\n2026-02-25,gym,45,4\n2026-02-27,cycling,90,2\n';
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(new Blob([csv], {type:'text/csv'}));
-    a.download = 'activetracker_template.csv';
-    a.click();
+    const csv = 'date,type,duration_minutes,intensity\n2026-02-22,running,60,3\n2026-02-25,gym,45,4\n';
+    const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv],{type:'text/csv'}));
+    a.download = 'activetracker_template.csv'; a.click();
 }
 </script>
 </body>
