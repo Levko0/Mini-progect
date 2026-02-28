@@ -3,7 +3,7 @@ from datetime import datetime, date, timedelta
 from algorithm import FitnessUser
 from models import (Base, engine, User, UserMeasurement, NutritionPlan,
                     WorkoutLog, WorkoutFeedback, TrainingPlan, BiweeklyCheck)
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import sessionmaker, joinedload
 import csv, io, json
 
 app = Flask(__name__)
@@ -235,11 +235,14 @@ def dashboard():
     active_plan = db.query(TrainingPlan).filter_by(user_id=TEMP_USER_ID, is_active=True)\
                     .order_by(TrainingPlan.id.desc()).first()
     plan_data = json.loads(active_plan.plan_json) if active_plan else None
-    db.close()
-
-    return render_template("dashboard.html", stats=stats, workouts=workouts,
+    
+    # Виправляємо проблему з лінивим завантаженням зв'язків
+    rendered_html = render_template("dashboard.html", stats=stats, workouts=workouts,
                            today=datetime.now().strftime('%Y-%m-%d'),
                            checkin_days=checkin_days, plan_data=plan_data)
+    
+    db.close()
+    return rendered_html
 
 # ─── ВІДГУК ПІСЛЯ ТРЕНУВАННЯ ──────────────────────────────────────────────────
 
@@ -271,8 +274,11 @@ def workout_feedback(workout_id):
 
     workout_type = workout.notes or "default"
     exercises_list = EXERCISES_BY_TYPE.get(workout_type, EXERCISES_BY_TYPE["default"])
+    
+    # Виправляємо проблему з лінивим завантаженням зв'язків
+    rendered_html = render_template("workout_feedback.html", workout=workout, exercises_list=exercises_list)
     db.close()
-    return render_template("workout_feedback.html", workout=workout, exercises_list=exercises_list)
+    return rendered_html
 
 # ─── КАЛЬКУЛЯТОР ──────────────────────────────────────────────────────────────
 
@@ -375,10 +381,12 @@ def checkin():
     planned = (active_plan.days_per_week * 2) if active_plan else 0
     prev_check = db.query(BiweeklyCheck).filter_by(user_id=TEMP_USER_ID)\
                    .order_by(BiweeklyCheck.id.desc()).first()
-    db.close()
-
-    return render_template("checkin.html", recent_workouts=recent_workouts,
+    
+    # Виправляємо проблему з лінивим завантаженням зв'язків
+    rendered_html = render_template("checkin.html", recent_workouts=recent_workouts,
                            planned=planned, prev_check=prev_check)
+    db.close()
+    return rendered_html
 
 # ─── CSV IMPORT ───────────────────────────────────────────────────────────────
 
