@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <title>Як пройшло тренування?</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        .emoji-btn { font-size: 28px; cursor: pointer; padding: 6px 12px; border-radius: 12px;
+                     border: 2px solid transparent; transition: all .2s; }
+        .emoji-btn:hover, .emoji-btn.selected { border-color: #0d6efd; background: #eff4ff; }
+        .exercise-chip { display: inline-block; padding: 6px 14px; margin: 4px;
+                         background: #f0f4ff; border: 1.5px solid #c5d3f0; border-radius: 20px;
+                         cursor: pointer; font-size: 13px; transition: all .2s; user-select: none; }
+        .exercise-chip.checked { background: #0d6efd; color: #fff; border-color: #0d6efd; }
+        .exercise-chip input { display: none; }
+    </style>
+</head>
+<body class="bg-light">
+
+<nav class="navbar navbar-dark bg-primary mb-4">
+  <div class="container">
+    <a class="navbar-brand fw-bold" href="/">ActiveTracker</a>
+    <a class="btn btn-outline-light btn-sm" href="/">← Пропустити</a>
+  </div>
+</nav>
+
+<div class="container" style="max-width: 640px;">
+    <div class="card border-0 shadow-sm p-4">
+        <h4 class="mb-1">🏋️ Тренування завершено!</h4>
+        <p class="text-muted mb-4">
+            {{ workout.notes or 'Тренування' }} · {{ workout.duration_minutes }} хв ·
+            {{ workout.date | string | truncate(10, True, '') }}
+        </p>
+
+        <form method="POST">
+            <!-- Самопочуття -->
+            <div class="mb-4">
+                <label class="form-label fw-semibold">Як ти себе почував? <span class="text-danger">*</span></label>
+                <div class="d-flex gap-2 flex-wrap" id="feelingRow">
+                    {% set feelings = [('1','😫','Жахливо'), ('2','😕','Погано'), ('3','😐','Нормально'), ('4','😊','Добре'), ('5','💪','Відмінно')] %}
+                    {% for val, emoji, label in feelings %}
+                    <label class="text-center" style="cursor:pointer;">
+                        <input type="radio" name="feeling" value="{{ val }}" required style="display:none"
+                               onchange="selectEmoji(this, 'feelingRow')">
+                        <div class="emoji-btn" data-radio="feeling-{{ val }}">{{ emoji }}</div>
+                        <div style="font-size:11px; color:#888;">{{ label }}</div>
+                    </label>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <!-- Рівень енергії -->
+            <div class="mb-4">
+                <label class="form-label fw-semibold">Рівень енергії під час тренування?</label>
+                <div class="d-flex gap-2 flex-wrap" id="energyRow">
+                    {% set energies = [('1','🔋','Дуже низький'), ('2','⚡','Низький'), ('3','✅','Середній'), ('4','🚀','Високий'), ('5','🔥','Максимальний')] %}
+                    {% for val, emoji, label in energies %}
+                    <label class="text-center" style="cursor:pointer;">
+                        <input type="radio" name="energy" value="{{ val }}" style="display:none"
+                               onchange="selectEmoji(this, 'energyRow')">
+                        <div class="emoji-btn">{{ emoji }}</div>
+                        <div style="font-size:11px; color:#888;">{{ label }}</div>
+                    </label>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <!-- Вправи -->
+            <div class="mb-4">
+                <label class="form-label fw-semibold">Які вправи робив? (обери всі)</label>
+                <div>
+                    {% for ex in exercises_list %}
+                    <label class="exercise-chip" onclick="toggleChip(this)">
+                        <input type="checkbox" name="exercises" value="{{ ex }}">
+                        {{ ex }}
+                    </label>
+                    {% endfor %}
+                </div>
+                <input type="text" name="custom_exercises" class="form-control mt-2"
+                       placeholder="Або введи свої вправи через кому...">
+            </div>
+
+            <!-- Коментар -->
+            <div class="mb-4">
+                <label class="form-label fw-semibold">Коментар (необов'язково)</label>
+                <textarea name="comment" class="form-control" rows="2"
+                          placeholder="Що було важко? Що вдалось? Будь-які нотатки..."></textarea>
+            </div>
+
+            <div class="d-flex gap-2">
+                <button type="submit" class="btn btn-primary flex-fill">Зберегти відгук</button>
+                <a href="/" class="btn btn-outline-secondary">Пропустити</a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+function selectEmoji(radio, rowId) {
+    document.querySelectorAll('#' + rowId + ' .emoji-btn').forEach(b => b.classList.remove('selected'));
+    radio.closest('label').querySelector('.emoji-btn').classList.add('selected');
+}
+function toggleChip(label) {
+    const cb = label.querySelector('input');
+    cb.checked = !cb.checked;
+    label.classList.toggle('checked', cb.checked);
+}
+</script>
+</body>
+</html>
