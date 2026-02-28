@@ -1,5 +1,7 @@
-from flask import Flask, render_template, request, redirect, url_for, jsonify, flash
+from flask import Flask, render_template, request, redirect, url_for, jsonify, flash, session
 from datetime import datetime, date, timedelta
+from functools import wraps
+from werkzeug.security import generate_password_hash, check_password_hash
 from algorithm import FitnessUser
 from models import (Base, engine, User, UserMeasurement, NutritionPlan,
                     WorkoutLog, WorkoutFeedback, TrainingPlan, BiweeklyCheck)
@@ -9,7 +11,6 @@ import csv, io, json
 app = Flask(__name__)
 app.secret_key = "activetracker-secret-key"
 Session = sessionmaker(bind=engine)
-TEMP_USER_ID = 1
 
 NEW_IMAGE_URL = "https://tovarystvo-kraftu.com/content/uploads/images/yajtsia-kuriache-tsesarky-perepelyne.png"
 
@@ -49,15 +50,17 @@ EXERCISES_BY_TYPE = {
     "default":   ["Розминка", "Розтяжка", "Кардіо", "Силові вправи", "Йога", "Пілатес"],
 }
 
-# ─── HELPERS ──────────────────────────────────────────────────────────────────
+# ─── MIDDLEWARE ДЛЯ АВТОРИЗАЦІЇ ───────────────────────────────────────────────
 
-def get_or_create_temp_user(db):
-    user = db.query(User).filter_by(id=TEMP_USER_ID).first()
-    if not user:
-        user = User(username="default", email="default@activetracker.com", password_hash="none")
-        db.add(user)
-        db.commit()
-    return user
+def login_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if 'user_id' not in session:
+            return redirect(url_for('login_page'))
+        return f(*args, **kwargs)
+    return decorated_function
+
+# ─── HELPERS ──────────────────────────────────────────────────────────────────
 
 def normalize_type(raw):
     if not raw:
@@ -70,8 +73,8 @@ def calculate_load(duration, intensity=3):
     except:
         return 0
 
-def get_stats(db):
-    workouts = db.query(WorkoutLog).filter_by(user_id=TEMP_USER_ID).all()
+def get_stats(db, user_id):
+    workouts = db.query(WorkoutLog).filter_by(user_id=user_id).all()
     loads = [round((w.duration_minutes or 0) * 0.3, 1) for w in workouts]
     return {
         "total": round(sum(loads), 1),
@@ -80,8 +83,8 @@ def get_stats(db):
         "chart_data": loads[-7:]
     }
 
-def days_until_checkin(db):
-    last = db.query(BiweeklyCheck).filter_by(user_id=TEMP_USER_ID)\
+def days_until_checkin(db, user_id):
+    last = db.query(BiweeklyCheck).filter_by(user_id=user_id)\
              .order_by(BiweeklyCheck.id.desc()).first()
     if not last:
         return 0
@@ -147,10 +150,10 @@ def generate_training_plan(goal, pal):
     return {"goal": goal, "days_per_week": days,
             "description": selected["description"], "schedule": selected["schedule"]}
 
-def analyze_checkin(db, new_weight, workouts_completed, workouts_planned, avg_energy):
-    prev = db.query(BiweeklyCheck).filter_by(user_id=TEMP_USER_ID)\
+def analyze_checkin(db, user_id, new_weight, workouts_completed, workouts_planned, avg_energy):
+    prev = db.query(BiweeklyCheck).filter_by(user_id=user_id)\
              .order_by(BiweeklyCheck.id.desc()).first()
-    last_m = db.query(UserMeasurement).filter_by(user_id=TEMP_USER_ID)\
+    last_m = db.query(UserMeasurement).filter_by(user_id=user_id)\
                .order_by(UserMeasurement.id.desc()).first()
 
     goal = last_m.goal if last_m else "maintain"
@@ -204,12 +207,88 @@ def analyze_checkin(db, new_weight, workouts_completed, workouts_planned, avg_en
 
     return "\n".join(messages), change_needed
 
+# ─── АВТОРИЗАЦІЯ ТА РЕЄСТРАЦІЯ ────────────────────────────────────────────────
+
+@app.route("/login", methods=["GET"])
+def login_page():
+    return render_template("login.html")
+
+@app.route("/register", methods=["GET"])
+def register_page():
+    return render_template("register.html")
+
+@app.route("/logout")
+def logout():
+    session.pop('user_id', None)
+    return redirect(url_for('login_page'))
+
+@app.route("/api/register", methods=["POST"])
+def api_register():
+    data = request.get_json()
+    db = Session()
+    if db.query(User).filter_by(email=data.get('email')).first():
+        db.close()
+        return jsonify({'error': 'Користувач з таким email вже існує'}), 400
+    
+    hashed_pw = generate_password_hash(data.get('password'))
+    new_user = User(
+        username=data.get('username'),
+        email=data.get('email'),
+        password_hash=hashed_pw
+    )
+    db.add(new_user)
+    db.commit()
+    session['user_id'] = new_user.id
+    db.close()
+    return jsonify({'success': True})
+
+@app.route("/api/login", methods=["POST"])
+def api_login():
+    data = request.get_json()
+    db = Session()
+    user = db.query(User).filter_by(email=data.get('email')).first()
+    if user and check_password_hash(user.password_hash, data.get('password')):
+        session['user_id'] = user.id
+        db.close()
+        return jsonify({'success': True})
+    db.close()
+    return jsonify({'error': 'Невірний email або пароль'}), 401
+
+@app.route("/api/profile/measurements", methods=["POST"])
+def api_profile_measurements():
+    if 'user_id' not in session:
+        return jsonify({'error': 'Не авторизовано'}), 401
+    
+    data = request.get_json()
+    db = Session()
+    
+    # Зберігаємо параметри користувача
+    db.add(UserMeasurement(
+        user_id=session['user_id'], weight=data['weight'], height=data['height'],
+        age=data['age'], gender=data['gender'], goal=data['goal'], activity_level=data['activity_level']
+    ))
+    
+    # Генеруємо програму тренувань на основі параметрів
+    plan_data = generate_training_plan(data['goal'], data['activity_level'])
+    db.add(TrainingPlan(
+        user_id=session['user_id'], goal=data['goal'],
+        days_per_week=plan_data["days_per_week"],
+        plan_json=json.dumps(plan_data, ensure_ascii=False)
+    ))
+    
+    db.commit()
+    db.close()
+    
+    # Повертаємо URL для редіректу
+    return jsonify({'success': True, 'redirect': url_for('dashboard')})
+
 # ─── DASHBOARD ────────────────────────────────────────────────────────────────
 
 @app.route("/", methods=["GET", "POST"])
+@login_required
 def dashboard():
+    user_id = session['user_id']
     db = Session()
-    get_or_create_temp_user(db)
 
     if request.method == "POST":
         duration = int(request.form.get("duration", 0))
@@ -220,7 +299,7 @@ def dashboard():
             workout_date = datetime.now()
 
         new_workout = WorkoutLog(
-            user_id=TEMP_USER_ID, date=workout_date,
+            user_id=user_id, date=workout_date,
             duration_minutes=duration, notes=workout_type
         )
         db.add(new_workout)
@@ -229,14 +308,13 @@ def dashboard():
         db.close()
         return redirect(url_for("workout_feedback", workout_id=workout_id))
 
-    workouts = db.query(WorkoutLog).filter_by(user_id=TEMP_USER_ID).order_by(WorkoutLog.id.desc()).all()
-    stats = get_stats(db)
-    checkin_days = days_until_checkin(db)
-    active_plan = db.query(TrainingPlan).filter_by(user_id=TEMP_USER_ID, is_active=True)\
+    workouts = db.query(WorkoutLog).options(joinedload(WorkoutLog.feedback)).filter_by(user_id=user_id).order_by(WorkoutLog.id.desc()).all()
+    stats = get_stats(db, user_id)
+    checkin_days = days_until_checkin(db, user_id)
+    active_plan = db.query(TrainingPlan).filter_by(user_id=user_id, is_active=True)\
                     .order_by(TrainingPlan.id.desc()).first()
     plan_data = json.loads(active_plan.plan_json) if active_plan else None
     
-    # Виправляємо проблему з лінивим завантаженням зв'язків
     rendered_html = render_template("dashboard.html", stats=stats, workouts=workouts,
                            today=datetime.now().strftime('%Y-%m-%d'),
                            checkin_days=checkin_days, plan_data=plan_data)
@@ -247,35 +325,52 @@ def dashboard():
 # ─── ВІДГУК ПІСЛЯ ТРЕНУВАННЯ ──────────────────────────────────────────────────
 
 @app.route("/workout-feedback/<int:workout_id>", methods=["GET", "POST"])
+@login_required
 def workout_feedback(workout_id):
+    user_id = session['user_id']
     db = Session()
-    workout = db.query(WorkoutLog).filter_by(id=workout_id, user_id=TEMP_USER_ID).first()
+    workout = db.query(WorkoutLog).filter_by(id=workout_id, user_id=user_id).first()
     if not workout:
         db.close()
         return redirect(url_for("dashboard"))
+
+    existing_feedback = db.query(WorkoutFeedback).filter_by(workout_id=workout_id).first()
 
     if request.method == "POST":
         exercises = request.form.getlist("exercises")
         custom = request.form.get("custom_exercises", "").strip()
         if custom:
             exercises.append(custom)
+            
+        exercises_str = ", ".join(exercises)
+        feeling_val = int(request.form.get("feeling", 3))
+        energy_val = int(request.form.get("energy", 3))
+        comment_str = request.form.get("comment", "").strip()
 
-        db.add(WorkoutFeedback(
-            user_id=TEMP_USER_ID, workout_id=workout_id,
-            feeling=int(request.form.get("feeling", 3)),
-            energy=int(request.form.get("energy", 3)),
-            exercises_done=", ".join(exercises),
-            comment=request.form.get("comment", "").strip()
-        ))
+        if existing_feedback:
+            existing_feedback.feeling = feeling_val
+            existing_feedback.energy = energy_val
+            existing_feedback.exercises_done = exercises_str
+            existing_feedback.comment = comment_str
+        else:
+            db.add(WorkoutFeedback(
+                user_id=user_id, workout_id=workout_id,
+                feeling=feeling_val, energy=energy_val,
+                exercises_done=exercises_str, comment=comment_str
+            ))
+            
         db.commit()
         db.close()
         flash("Дякуємо за відгук! Дані збережено.", "success")
         return redirect(url_for("dashboard"))
 
+    if existing_feedback:
+        flash("Ви вже залишили відгук для цього тренування.", "info")
+        db.close()
+        return redirect(url_for("dashboard"))
+
     workout_type = workout.notes or "default"
     exercises_list = EXERCISES_BY_TYPE.get(workout_type, EXERCISES_BY_TYPE["default"])
-    
-    # Виправляємо проблему з лінивим завантаженням зв'язків
     rendered_html = render_template("workout_feedback.html", workout=workout, exercises_list=exercises_list)
     db.close()
     return rendered_html
@@ -283,7 +378,9 @@ def workout_feedback(workout_id):
 # ─── КАЛЬКУЛЯТОР ──────────────────────────────────────────────────────────────
 
 @app.route("/calculator", methods=["GET", "POST"])
+@login_required
 def calculator():
+    user_id = session['user_id']
     if request.method == "POST":
         try:
             name   = request.form.get("name")
@@ -295,16 +392,15 @@ def calculator():
             pal    = float(request.form.get("pal"))
 
             db = Session()
-            get_or_create_temp_user(db)
             db.add(UserMeasurement(
-                user_id=TEMP_USER_ID, weight=weight, height=height,
+                user_id=user_id, weight=weight, height=height,
                 age=age, gender=gender, goal=goal, activity_level=pal
             ))
             plan_data = generate_training_plan(goal, pal)
-            db.query(TrainingPlan).filter_by(user_id=TEMP_USER_ID, is_active=True)\
+            db.query(TrainingPlan).filter_by(user_id=user_id, is_active=True)\
               .update({"is_active": False})
             db.add(TrainingPlan(
-                user_id=TEMP_USER_ID, goal=goal,
+                user_id=user_id, goal=goal,
                 days_per_week=plan_data["days_per_week"],
                 plan_json=json.dumps(plan_data, ensure_ascii=False)
             ))
@@ -322,9 +418,10 @@ def calculator():
 # ─── ЗАМІРИ РАЗ В 2 ТИЖНІ ────────────────────────────────────────────────────
 
 @app.route("/checkin", methods=["GET", "POST"])
+@login_required
 def checkin():
+    user_id = session['user_id']
     db = Session()
-    get_or_create_temp_user(db)
 
     if request.method == "POST":
         try:
@@ -336,10 +433,10 @@ def checkin():
             chest = request.form.get("chest_cm") or None
             hips  = request.form.get("hips_cm")  or None
 
-            recommendation, change_needed = analyze_checkin(db, new_weight, completed, planned, avg_energy)
+            recommendation, change_needed = analyze_checkin(db, user_id, new_weight, completed, planned, avg_energy)
 
             db.add(BiweeklyCheck(
-                user_id=TEMP_USER_ID, date=date.today(),
+                user_id=user_id, date=date.today(),
                 weight=new_weight,
                 waist_cm=float(waist) if waist else None,
                 chest_cm=float(chest) if chest else None,
@@ -350,14 +447,14 @@ def checkin():
             ))
 
             if change_needed:
-                last_m = db.query(UserMeasurement).filter_by(user_id=TEMP_USER_ID)\
+                last_m = db.query(UserMeasurement).filter_by(user_id=user_id)\
                            .order_by(UserMeasurement.id.desc()).first()
                 if last_m:
                     new_plan = generate_training_plan(last_m.goal, last_m.activity_level)
-                    db.query(TrainingPlan).filter_by(user_id=TEMP_USER_ID, is_active=True)\
+                    db.query(TrainingPlan).filter_by(user_id=user_id, is_active=True)\
                       .update({"is_active": False})
                     db.add(TrainingPlan(
-                        user_id=TEMP_USER_ID, goal=last_m.goal,
+                        user_id=user_id, goal=last_m.goal,
                         days_per_week=new_plan["days_per_week"],
                         plan_json=json.dumps(new_plan, ensure_ascii=False)
                     ))
@@ -373,16 +470,15 @@ def checkin():
 
     two_weeks_ago = datetime.now() - timedelta(days=14)
     recent_workouts = db.query(WorkoutLog).filter(
-        WorkoutLog.user_id == TEMP_USER_ID,
+        WorkoutLog.user_id == user_id,
         WorkoutLog.date >= two_weeks_ago
     ).count()
-    active_plan = db.query(TrainingPlan).filter_by(user_id=TEMP_USER_ID, is_active=True)\
+    active_plan = db.query(TrainingPlan).filter_by(user_id=user_id, is_active=True)\
                     .order_by(TrainingPlan.id.desc()).first()
     planned = (active_plan.days_per_week * 2) if active_plan else 0
-    prev_check = db.query(BiweeklyCheck).filter_by(user_id=TEMP_USER_ID)\
+    prev_check = db.query(BiweeklyCheck).filter_by(user_id=user_id)\
                    .order_by(BiweeklyCheck.id.desc()).first()
     
-    # Виправляємо проблему з лінивим завантаженням зв'язків
     rendered_html = render_template("checkin.html", recent_workouts=recent_workouts,
                            planned=planned, prev_check=prev_check)
     db.close()
@@ -391,7 +487,9 @@ def checkin():
 # ─── CSV IMPORT ───────────────────────────────────────────────────────────────
 
 @app.route("/import-csv", methods=["POST"])
+@login_required
 def import_csv():
+    user_id = session['user_id']
     if "file" not in request.files:
         return jsonify({"error": "Файл не знайдено"}), 400
     file = request.files["file"]
@@ -423,7 +521,6 @@ def import_csv():
 
     imported, errors = 0, []
     db = Session()
-    get_or_create_temp_user(db)
 
     for i, row in enumerate(reader, start=2):
         try:
@@ -438,7 +535,7 @@ def import_csv():
                 workout_date = datetime.strptime(raw_date, "%Y-%m-%d")
             except ValueError:
                 workout_date = datetime.strptime(raw_date, "%d.%m.%Y")
-            db.add(WorkoutLog(user_id=TEMP_USER_ID, date=workout_date,
+            db.add(WorkoutLog(user_id=user_id, date=workout_date,
                               duration_minutes=duration, notes=normalize_type(raw_type)))
             imported += 1
         except Exception as e:
@@ -451,6 +548,7 @@ def import_csv():
 # ─── LIBRARY ─────────────────────────────────────────────────────────────────
 
 @app.route("/library")
+@login_required
 def library():
     return render_template("library.html", exercises=EXERCISE_DB)
 
