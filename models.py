@@ -71,7 +71,9 @@ class Exercise(Base):
     category = Column(String)
     difficulty = Column(String)
     description = Column(String)
-
+    is_essential = Column(Boolean, default=False)
+    day_number   = Column(Integer, nullable=True)
+    video_url    = Column(String, nullable=True)
 
 class WorkoutLog(Base):
     __tablename__ = 'workout_logs'

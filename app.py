@@ -275,6 +275,21 @@ def api_profile_measurements():
         days_per_week=plan_data["days_per_week"],
         plan_json=json.dumps(plan_data, ensure_ascii=False)
     ))
+
+    fitness_user = FitnessUser(
+        data.get('username', 'user'),
+        data['weight'], data['height'],
+        data['age'], data['gender'],
+        data['goal'], data['activity_level']
+    )
+    nutrition = fitness_user.get_full_plan()
+    db.add(NutritionPlan(
+        user_id=session['user_id'],
+        daily_calories=nutrition['calories'],
+        protein_g=nutrition['macros']['protein'],
+        fat_g=nutrition['macros']['fat'],
+        carbs_g=nutrition['macros']['carbs']
+    ))
     
     db.commit()
     db.close()
@@ -303,6 +318,17 @@ def dashboard():
             duration_minutes=duration, notes=workout_type
         )
         db.add(new_workout)
+
+        user = db.query(User).filter_by(id=user_id).first()
+        user.total_workouts = (user.total_workouts or 0) + 1
+        today = date.today()
+        if user.last_workout_date == today - timedelta(days=1):
+            user.current_streak = (user.current_streak or 0) + 1
+        elif user.last_workout_date != today:
+            user.current_streak = 1
+        user.best_streak = max(user.best_streak or 0, user.current_streak)
+        user.last_workout_date = today        
+
         db.commit()
         workout_id = new_workout.id
         db.close()
@@ -404,11 +430,23 @@ def calculator():
                 days_per_week=plan_data["days_per_week"],
                 plan_json=json.dumps(plan_data, ensure_ascii=False)
             ))
+            
+            fitness_user = FitnessUser(name, weight, height, age, gender, goal, pal)
+            plan = fitness_user.get_full_plan()
+
+            db.add(NutritionPlan(
+                user_id=user_id,
+                daily_calories=plan['calories'],
+                protein_g=plan['macros']['protein'],
+                fat_g=plan['macros']['fat'],
+                carbs_g=plan['macros']['carbs']
+            ))
+
+
             db.commit()
             db.close()
 
-            user = FitnessUser(name, weight, height, age, gender, goal, pal)
-            return render_template("result.html", plan=user.get_full_plan(), training_plan=plan_data)
+            return render_template("result.html", plan=plan, training_plan=plan_data)
 
         except ValueError:
             return "Помилка! Введіть коректні числа.", 400
@@ -551,6 +589,71 @@ def import_csv():
 @login_required
 def library():
     return render_template("library.html", exercises=EXERCISE_DB)
+
+@app.route("/settings")
+@login_required
+def settings_page():
+    return render_template("settings.html")
+
+@app.route("/api/settings", methods=["POST"])
+@login_required
+def api_settings():
+    data = request.get_json()
+    db = Session()
+    user = db.query(User).filter_by(id=session['user_id']).first()
+    if data.get('new_username'):
+        user.username = data['new_username']
+    if data.get('new_password'):
+        user.password_hash = generate_password_hash(data['new_password'])
+    db.commit()
+    db.close()
+    return jsonify({'message': 'Збережено!'})
+
+@app.route("/api/tracker/import", methods=["POST"])
+@login_required
+def api_tracker_import():
+    file = request.files.get('file')
+    if not file:
+        return jsonify({'error': 'Файл не знайдено'}), 400
+
+    content = file.read().decode("utf-8-sig", errors="replace")
+    reader = csv.DictReader(io.StringIO(content))
+    headers = {h.strip().lower(): h for h in (reader.fieldnames or [])}
+
+    col_steps = next((headers[k] for k in ['steps', 'кроки'] if k in headers), None)
+    if not col_steps:
+        return jsonify({'error': 'Колонка steps не знайдена'}), 400
+
+    steps_list = []
+    for row in reader:
+        try:
+            steps_list.append(int(float(row[col_steps])))
+        except:
+            continue
+
+    if not steps_list:
+        return jsonify({'error': 'Немає даних'}), 400
+
+    avg_steps = sum(steps_list) / len(steps_list)
+
+    if avg_steps < 5000:
+        new_pal, activity_level = 1.2, "Малоактивний"
+    elif avg_steps < 8000:
+        new_pal, activity_level = 1.375, "Легка активність"
+    elif avg_steps < 12000:
+        new_pal, activity_level = 1.55, "Помірна активність"
+    else:
+        new_pal, activity_level = 1.725, "Дуже активний"
+
+    db = Session()
+    last_m = db.query(UserMeasurement).filter_by(user_id=session['user_id'])\
+               .order_by(UserMeasurement.id.desc()).first()
+    if last_m:
+        last_m.activity_level = new_pal
+    db.commit()
+    db.close()
+
+    return jsonify({'avg_steps': round(avg_steps), 'activity_level': activity_level, 'new_pal': new_pal})
 
 if __name__ == "__main__":
     app.run(debug=True, port=5000)
