@@ -28,6 +28,7 @@
         <a class="nav-link" href="/calculator">Калькулятор</a>
         <a class="nav-link" href="/library">Бібліотека</a>
         <a class="nav-link" href="/checkin">📏 Замір</a>
+        <a class="nav-link" href="/stats" style="color: #afffff; font-weight: bold;">📊 Аналітика</a>
     </div>
     <div class="ms-auto">
         <button class="btn btn-outline-light btn-sm" data-bs-toggle="modal" data-bs-target="#csvImportModal">
@@ -39,7 +40,6 @@
 
 <div class="container">
 
-    <!-- Flash повідомлення -->
     {% with messages = get_flashed_messages(with_categories=true) %}
     {% if messages %}
         {% for cat, msg in messages %}
@@ -51,43 +51,56 @@
     {% endif %}
     {% endwith %}
 
-    <!-- Нагадування про замір -->
-    {% if checkin_days == 0 %}
-    <div class="alert alert-warning d-flex align-items-center justify-content-between mb-4">
-        <span>📏 <strong>Час для контрольного заміру!</strong> Пройшло 2 тижні — перевір свій прогрес.</span>
-        <a href="/checkin" class="btn btn-warning btn-sm ms-3">Зробити замір →</a>
-    </div>
+    {% if is_first_time %}
+        <div class="alert alert-primary d-flex align-items-center justify-content-between mb-4 shadow-sm" style="border-left: 5px solid #0d6efd;">
+            <span>📏 <strong>Вітаємо у ActiveTracker!</strong> Щоб ми могли почати аналіз твого прогресу, зроби свій перший замір тіла.</span>
+            <a href="/checkin" class="btn btn-primary btn-sm ms-3 px-4" style="border-radius: 20px;">Зробити перший замір →</a>
+        </div>
+    {% elif checkin_days == 0 %}
+        <div class="alert alert-warning d-flex align-items-center justify-content-between mb-4 shadow-sm" style="border-left: 5px solid #ffc107;">
+            <span>📅 <strong>Час для контрольного заміру!</strong> Пройшло 2 тижні — перевір свій прогрес.</span>
+            <a href="/checkin" class="btn btn-warning btn-sm ms-3 px-4" style="border-radius: 20px;">Зробити замір →</a>
+        </div>
     {% elif checkin_days <= 3 %}
-    <div class="alert alert-info d-flex align-items-center justify-content-between mb-4">
-        <span>📅 До наступного заміру залишилось <strong>{{ checkin_days }} дн.</strong></span>
-        <a href="/checkin" class="btn btn-outline-info btn-sm ms-3">Зробити зараз</a>
-    </div>
+        <div class="alert alert-info d-flex align-items-center justify-content-between mb-4 shadow-sm">
+            <span>⏳ До наступного планового заміру залишилось <strong>{{ checkin_days }} дн.</strong></span>
+            <a href="/checkin" class="btn btn-outline-info btn-sm ms-3">Зробити зараз</a>
+        </div>
     {% endif %}
 
-    <!-- Stats -->
     <div class="row mb-4">
         <div class="col-md-6">
-            <div class="card p-3 shadow-sm text-center border-0">
+            <div class="card p-3 shadow-sm text-center border-0 h-100">
                 <h3 class="text-primary">{{ stats.total }}</h3>
                 <small class="text-muted">Навантаження (тиждень)</small>
             </div>
         </div>
         <div class="col-md-6">
-            <div class="card p-3 shadow-sm text-center border-0">
+            <div class="card p-3 shadow-sm text-center border-0 h-100">
                 <h3 class="text-success">{{ stats.count }}</h3>
                 <small class="text-muted">Кількість тренувань</small>
             </div>
         </div>
     </div>
 
-    <!-- Chart -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card p-3 shadow-sm border-0 d-flex flex-row justify-content-between align-items-center" style="background: linear-gradient(90deg, #ffffff 0%, #f0f7ff 100%);">
+                <div>
+                    <h6 class="mb-1 fw-bold text-primary">📊 Аналітика прогресу тіла</h6>
+                    <p class="mb-0 text-muted" style="font-size: 13px;">Перевір свій Індес Маси Тіла та динаміку набору ваги на основі замірів.</p>
+                </div>
+                <a href="/stats" class="btn btn-primary btn-sm px-4 fw-bold" style="border-radius: 20px;">Відкрити звіт →</a>
+            </div>
+        </div>
+    </div>
+
     <div class="card p-4 shadow-sm mb-4 border-0">
         <h5 class="card-title text-secondary">Динаміка активності</h5>
         <canvas id="chart" height="80"></canvas>
     </div>
 
     <div class="row">
-        <!-- Ліва колонка -->
         <div class="col-md-4 mb-3">
             <div class="card p-3 shadow-sm border-0 mb-3">
                 <h5>Додати тренування</h5>
@@ -112,7 +125,6 @@
                 </div>
             </div>
 
-            <!-- Програма тренувань -->
             {% if plan_data %}
             <div class="card p-3 shadow-sm border-0">
                 <h6 class="fw-bold mb-1">📋 Твоя програма</h6>
@@ -133,7 +145,6 @@
             {% endif %}
         </div>
 
-        <!-- Права колонка — Історія -->
         <div class="col-md-8">
             <div class="card p-3 shadow-sm border-0">
                 <h5>Історія</h5>
@@ -170,7 +181,6 @@
     </div>
 </div>
 
-<!-- CSV IMPORT MODAL -->
 <div class="modal fade" id="csvImportModal" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog modal-lg modal-dialog-centered">
     <div class="modal-content border-0 shadow">

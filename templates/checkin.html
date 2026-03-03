@@ -50,6 +50,9 @@
                 </div>
             </div>
 
+            {% if show_full_form %}
+            <hr class="my-4">
+
             <div class="mb-3">
                 <label class="form-label fw-semibold">Середній рівень енергії за 2 тижні</label>
                 <select name="avg_energy" class="form-select">
@@ -73,8 +76,11 @@
                            value="{{ planned }}" min="0">
                 </div>
             </div>
+            {% endif %}
 
-            <button type="submit" class="btn btn-primary w-100">Аналізувати прогрес →</button>
+            <button type="submit" class="btn btn-primary w-100 py-2 fw-bold">
+                {% if show_full_form %}Аналізувати прогрес →{% else %}Зберегти замір →{% endif %}
+            </button>
         </form>
     </div>
 </div>
