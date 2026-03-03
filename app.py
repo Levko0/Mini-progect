@@ -1,10 +1,11 @@
 from flask import Flask, render_template, request, redirect, url_for, jsonify, flash, session
 from datetime import datetime, date, timedelta
 from functools import wraps
+from collections import defaultdict
 from werkzeug.security import generate_password_hash, check_password_hash
 from algorithm import FitnessUser
 from models import (Base, engine, User, UserMeasurement, NutritionPlan,
-                    WorkoutLog, WorkoutFeedback, TrainingPlan, BiweeklyCheck)
+                    WorkoutLog, WorkoutFeedback, TrainingPlan, BiweeklyCheck, Exercise)
 from sqlalchemy.orm import sessionmaker, joinedload
 import csv, io, json
 
@@ -653,8 +654,29 @@ def stats():
 
 @app.route("/library")
 @login_required
-def library():
-    return render_template("library.html", exercises=EXERCISE_DB)
+def library_page():
+    db = Session() # Відкриваємо сесію БД
+    all_exercises = db.query(Exercise).all()
+
+    exercises_dict = defaultdict(list)
+    for ex in all_exercises:
+        # YouTube вимагає спеціальний формат посилання для вбудовування на інші сайти
+        embed_url = ""
+        if ex.video_url and "watch?v=" in ex.video_url:
+            video_id = ex.video_url.split("watch?v=")[-1]
+            embed_url = f"https://www.youtube.com/embed/{video_id}"
+        else:
+            embed_url = ex.video_url # Якщо посилання вже правильне або порожнє
+
+        exercises_dict[ex.category].append({
+            "name": ex.name,
+            "desc": ex.description,
+            "video_url": embed_url, # Передаємо нове посилання
+            "difficulty": getattr(ex, 'difficulty', 'medium') # На випадок відсутності поля
+        })
+    db.close()
+    
+    return render_template('library.html', exercises=exercises_dict)
 
 @app.route("/settings")
 @login_required
