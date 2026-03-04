@@ -30,10 +30,12 @@
         <a class="nav-link" href="/checkin">📏 Замір</a>
         <a class="nav-link" href="/stats" style="color: #afffff; font-weight: bold;">📊 Аналітика</a>
     </div>
-    <div class="ms-auto">
+
+    <div class="ms-auto d-flex align-items-center gap-3">
         <button class="btn btn-outline-light btn-sm" data-bs-toggle="modal" data-bs-target="#csvImportModal">
             ⬆ Імпорт CSV
         </button>
+        <a href="{{ url_for('logout') }}" class="btn btn-danger btn-sm fw-bold px-3 shadow-sm">Вийти</a>
     </div>
   </div>
 </nav>
@@ -57,7 +59,7 @@
             <a href="/checkin" class="btn btn-primary btn-sm ms-3 px-4" style="border-radius: 20px;">Зробити перший замір →</a>
         </div>
     {% elif checkin_days == 0 %}
-        <div class="alert alert-warning d-flex align-items-center justify-content-between mb-4 shadow-sm" style="border-left: 5px solid #ffc107;">
+        <div class="alert alert-warning d-flex align-items-center justify-content-between mb-4 shadow-sm" style="border-left: 5 solid #ffc107;">
             <span>📅 <strong>Час для контрольного заміру!</strong> Пройшло 2 тижні — перевір свій прогрес.</span>
             <a href="/checkin" class="btn btn-warning btn-sm ms-3 px-4" style="border-radius: 20px;">Зробити замір →</a>
         </div>

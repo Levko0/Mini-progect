@@ -213,7 +213,6 @@ def analyze_checkin(db, user_id, new_weight, workouts_completed, workouts_planne
 @app.route("/login", methods=["GET"])
 def login_page():
     return render_template("login.html")
-
 @app.route("/register", methods=["GET"])
 def register_page():
     return render_template("register.html")
@@ -675,7 +674,7 @@ def library_page():
             "difficulty": getattr(ex, 'difficulty', 'medium') # На випадок відсутності поля
         })
     db.close()
-    
+
     return render_template('library.html', exercises=exercises_dict)
 
 @app.route("/settings")
@@ -742,6 +741,5 @@ def api_tracker_import():
     db.close()
 
     return jsonify({'avg_steps': round(avg_steps), 'activity_level': activity_level, 'new_pal': new_pal})
-
 if __name__ == "__main__":
     app.run(debug=True, port=5000)
