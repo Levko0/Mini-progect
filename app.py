@@ -741,5 +741,78 @@ def api_tracker_import():
     db.close()
 
     return jsonify({'avg_steps': round(avg_steps), 'activity_level': activity_level, 'new_pal': new_pal})
+
+
+# ─── GPX IMPORT (Garmin) ──────────────────────────────────────────────────────
+import xml.etree.ElementTree as ET
+
+@app.route("/import-gpx", methods=["POST"])
+@login_required
+def import_gpx():
+    user_id = session['user_id']
+    file = request.files.get("file")
+
+    if not file:
+        return jsonify({"error": "Файл не знайдено"}), 400
+    if not file.filename.lower().endswith(".gpx"):
+        return jsonify({"error": "Підтримуються лише .gpx файли"}), 400
+
+    try:
+        content = file.read().decode("utf-8", errors="replace")
+        root = ET.fromstring(content)
+    except ET.ParseError as e:
+        return jsonify({"error": f"Помилка парсингу XML: {e}"}), 400
+
+    ns = {
+        "gpx": "http://www.topografix.com/GPX/1/1",
+        "gpxtpx": "http://www.garmin.com/xmlschemas/TrackPointExtension/v1"
+    }
+
+    imported, errors = 0, []
+    db = Session()
+
+    for trk in root.findall("gpx:trk", ns):
+        try:
+            name_el = trk.find("gpx:name", ns)
+            type_el = trk.find("gpx:type", ns)
+            raw_type = (type_el.text if type_el is not None else
+                        name_el.text if name_el is not None else "Спорт")
+
+            trkpts = trk.findall(".//gpx:trkpt", ns)
+            if not trkpts:
+                errors.append("Трек не має точок — пропущено")
+                continue
+
+            def parse_time(trkpt):
+                t_el = trkpt.find("gpx:time", ns)
+                if t_el is not None and t_el.text:
+                    t_str = t_el.text.rstrip("Z").split(".")[0]
+                    return datetime.strptime(t_str, "%Y-%m-%dT%H:%M:%S")
+                return None
+
+            start_time = parse_time(trkpts[0])
+            end_time   = parse_time(trkpts[-1])
+
+            if not start_time:
+                errors.append("Не вдалося визначити час початку — пропущено")
+                continue
+
+            duration = int((end_time - start_time).total_seconds() / 60) if (end_time and end_time > start_time) else 30
+
+            db.add(WorkoutLog(
+                user_id=user_id,
+                date=start_time,
+                duration_minutes=duration,
+                notes=normalize_type(raw_type)
+            ))
+            imported += 1
+
+        except Exception as e:
+            errors.append(f"Трек: {str(e)}")
+
+    db.commit()
+    db.close()
+    return jsonify({"imported": imported, "errors": errors[:10]})
+
 if __name__ == "__main__":
     app.run(debug=True, port=5000)
