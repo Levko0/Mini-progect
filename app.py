@@ -52,6 +52,7 @@ EXERCISES_BY_TYPE = {
 }
 
 # ─── MIDDLEWARE ДЛЯ АВТОРИЗАЦІЇ ───────────────────────────────────────────────
+#gas
 
 def login_required(f):
     @wraps(f)
