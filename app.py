@@ -262,13 +262,11 @@ def api_profile_measurements():
     data = request.get_json()
     db = Session()
 
-    # Зберігаємо параметри користувача
     db.add(UserMeasurement(
         user_id=session['user_id'], weight=data['weight'], height=data['height'],
         age=data['age'], gender=data['gender'], goal=data['goal'], activity_level=data['activity_level']
     ))
 
-    # Генеруємо програму тренувань на основі параметрів
     plan_data = generate_training_plan(data['goal'], data['activity_level'])
     db.add(TrainingPlan(
         user_id=session['user_id'], goal=data['goal'],
@@ -294,7 +292,6 @@ def api_profile_measurements():
     db.commit()
     db.close()
 
-    # Повертаємо URL для редіректу
     return jsonify({'success': True, 'redirect': url_for('dashboard')})
 
 # ─── DASHBOARD ────────────────────────────────────────────────────────────────
@@ -339,16 +336,14 @@ def dashboard():
 
     is_first_time = False
     if not last_check:
-        # Якщо в таблиці BiweeklyCheck ще немає записів — це перший вхід
         is_first_time = True
         checkin_days = 0
     else:
-        # Рахуємо дні на основі календаря (поточна дата мінус дата останнього заміру)
         days_passed = (date.today() - last_check.date).days
         if days_passed >= 14:
-            checkin_days = 0 # Час робити новий замір
+            checkin_days = 0
         else:
-            checkin_days = 14 - days_passed # Скільки днів лишилось до 2 тижнів
+            checkin_days = 14 - days_passed
 
     workouts = db.query(WorkoutLog).options(joinedload(WorkoutLog.feedback)).filter_by(user_id=user_id).order_by(WorkoutLog.id.desc()).all()
     stats = get_stats(db, user_id)
@@ -357,7 +352,6 @@ def dashboard():
                     .order_by(TrainingPlan.id.desc()).first()
     plan_data = json.loads(active_plan.plan_json) if active_plan else None
 
-    # Передаємо is_first_time у шаблон
     rendered_html = render_template("dashboard.html", stats=stats, workouts=workouts,
                            today=datetime.now().strftime('%Y-%m-%d'),
                            checkin_days=checkin_days,
@@ -479,10 +473,8 @@ def checkin():
     user_id = session['user_id']
     db = Session()
 
-    # Отримуємо останній замір для перевірки дати
     last_check = db.query(BiweeklyCheck).filter_by(user_id=user_id).order_by(BiweeklyCheck.id.desc()).first()
 
-    # Визначаємо, чи пройшло 14 днів (якщо замірів немає — це перший замір, показуємо мінімум)
     show_full_form = False
     if last_check:
         days_passed = (date.today() - last_check.date).days
@@ -492,7 +484,6 @@ def checkin():
     if request.method == "POST":
         try:
             new_weight = float(request.form.get("weight"))
-            # Якщо полів немає у формі (міні-версія), ставимо значення за замовчуванням
             avg_energy = int(request.form.get("avg_energy", 3)) if show_full_form else 3
             completed  = int(request.form.get("workouts_completed", 0)) if show_full_form else 0
             planned    = int(request.form.get("workouts_planned", 0)) if show_full_form else 0
@@ -514,7 +505,6 @@ def checkin():
                 recommendation=recommendation, change_needed=change_needed
             ))
 
-            # Логіка оновлення плану залишається без змін
             db.commit()
             db.close()
             return render_template("checkin_result.html", recommendation=recommendation, change_needed=change_needed)
@@ -523,7 +513,6 @@ def checkin():
             db.close()
             return f"Помилка: {e}", 400
 
-    # Розрахунок статистики для відображення у формі (GET)
     two_weeks_ago = datetime.now() - timedelta(days=14)
     recent_workouts = db.query(WorkoutLog).filter(WorkoutLog.user_id == user_id, WorkoutLog.date >= two_weeks_ago).count()
     active_plan = db.query(TrainingPlan).filter_by(user_id=user_id, is_active=True).order_by(TrainingPlan.id.desc()).first()
@@ -601,7 +590,6 @@ def stats():
     db = Session()
     user_id = session['user_id']
 
-    # 1. ДАНІ ПРО ТІЛО (Вага та ІМТ)
     measurements = db.query(UserMeasurement).filter_by(user_id=user_id).all()
 
     if not measurements:
@@ -610,7 +598,6 @@ def stats():
 
     last_m = measurements[-1]
 
-    # Захист від ZeroDivisionError
     if not last_m.height or last_m.height <= 0:
         db.close()
         return "<h3>Помилка: зріст не вказано або він дорівнює 0. Виправте це в калькуляторі!</h3><br><a href='/calculator'>До калькулятора</a>"
@@ -618,19 +605,14 @@ def stats():
     labels_weight = [m.date.strftime('%d.%m') for m in measurements]
     weights_data = [m.weight for m in measurements]
 
-    # Розрахунок ІМТ (BMI)
     height_m = last_m.height / 100
     bmi = round(last_m.weight / (height_m ** 2), 1)
 
-    # 2. ДАНІ ПРО ТРЕНУВАННЯ (Навантаження)
-    # Отримуємо останні 10 тренувань для графіка активності
     workouts = db.query(WorkoutLog).filter_by(user_id=user_id).order_by(WorkoutLog.date.asc()).all()
 
     labels_work = [w.date.strftime('%d.%m') for w in workouts[-10:]]
-    # Розрахунок Load як на Дашборді: час * 0.3
     loads_data = [round((w.duration_minutes or 0) * 0.3, 1) for w in workouts[-10:]]
 
-    # Логіка статусів (залишається без змін)
     if bmi < 18.5:
         status, color = "Тобі потрібно більше калорій для набору маси!", "orange"
     elif 18.5 <= bmi < 25:
@@ -651,29 +633,41 @@ def stats():
                            color=color)
 # ─── LIBRARY ─────────────────────────────────────────────────────────────────
 
+from collections import defaultdict
+
 @app.route("/library")
-@login_required
 def library_page():
-    db = Session() # Відкриваємо сесію БД
+
+        
+    db = Session()
     all_exercises = db.query(Exercise).all()
+    db.close()
 
     exercises_dict = defaultdict(list)
-    for ex in all_exercises:
-        # YouTube вимагає спеціальний формат посилання для вбудовування на інші сайти
-        embed_url = ""
-        if ex.video_url and "watch?v=" in ex.video_url:
-            video_id = ex.video_url.split("watch?v=")[-1]
-            embed_url = f"https://www.youtube.com/embed/{video_id}"
-        else:
-            embed_url = ex.video_url # Якщо посилання вже правильне або порожнє
 
-        exercises_dict[ex.category].append({
+    category_names = {
+        "base_fullbody": " Базові вправи (Фулбоді)",
+        "football": " Спеціалізація: Футбол",
+        "armwrestling": " Спеціалізація: Армрестлінг",
+        "volleyball": " Спеціалізація: Волейбол",
+        "boxing": " Спеціалізація: Бокс",
+        "wrestling": " Спеціалізація: Боротьба"
+    }
+
+    for ex in all_exercises:
+        embed_url = ex.video_url
+        if ex.video_url and "watch?v=" in ex.video_url:
+            video_id = ex.video_url.split("watch?v=")[-1].split("&")[0]
+            embed_url = f"https://www.youtube.com/embed/{video_id}"
+
+        cat_name = category_names.get(ex.category, ex.category)
+
+        exercises_dict[cat_name].append({
             "name": ex.name,
-            "desc": ex.description,
-            "video_url": embed_url, # Передаємо нове посилання
-            "difficulty": getattr(ex, 'difficulty', 'medium') # На випадок відсутності поля
+            "desc": ex.description, 
+            "video_url": embed_url, 
+            "difficulty": ex.difficulty
         })
-    db.close()
 
     return render_template('library.html', exercises=exercises_dict)
 

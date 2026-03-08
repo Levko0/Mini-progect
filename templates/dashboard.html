@@ -10,7 +10,7 @@
         .drop-zone:hover, .drop-zone.drag-over { border-color: #0d6efd; background: #eff4ff; }
         .drop-zone svg { color: #0d6efd; margin-bottom: 10px; }
         .drop-zone p { color: #888; font-size: 13px; margin-bottom: 14px; }
-        #importProgress, #importResult, #importError { display: none; }
+        #gpxImportProgress, #gpxImportResult, #gpxImportError { display: none; }
         .template-link { font-size: 12px; color: #0d6efd; cursor: pointer; text-decoration: underline dotted; }
         .plan-day { border-left: 3px solid #0d6efd; padding: 8px 12px; margin-bottom: 8px; background: #f8faff; border-radius: 0 8px 8px 0; }
         .plan-day.cardio { border-color: #198754; }
@@ -32,8 +32,8 @@
     </div>
 
     <div class="ms-auto d-flex align-items-center gap-3">
-        <button class="btn btn-outline-light btn-sm" data-bs-toggle="modal" data-bs-target="#csvImportModal">
-            ⬆ Імпорт CSV
+        <button class="btn btn-outline-warning btn-sm" data-bs-toggle="modal" data-bs-target="#gpxImportModal">
+            🏃 Garmin GPX
         </button>
         <a href="{{ url_for('logout') }}" class="btn btn-danger btn-sm fw-bold px-3 shadow-sm">Вийти</a>
     </div>
@@ -121,8 +121,8 @@
                 <hr class="my-3">
                 <div class="text-center">
                     <small class="text-muted d-block mb-2">Маєте дані з Garmin / Strava?</small>
-                    <button class="btn btn-outline-primary btn-sm w-100" data-bs-toggle="modal" data-bs-target="#csvImportModal">
-                        ⬆ Імпортувати з CSV
+                    <button class="btn btn-outline-warning btn-sm w-100" data-bs-toggle="modal" data-bs-target="#gpxImportModal">
+                        🏃 Імпортувати з Garmin GPX
                     </button>
                 </div>
             </div>
@@ -183,54 +183,55 @@
     </div>
 </div>
 
-<div class="modal fade" id="csvImportModal" tabindex="-1" aria-hidden="true">
+<div class="modal fade" id="gpxImportModal" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog modal-lg modal-dialog-centered">
     <div class="modal-content border-0 shadow">
-      <div class="modal-header bg-primary text-white">
-        <h5 class="modal-title">⬆ Імпорт тренувань з CSV</h5>
+      <div class="modal-header text-white" style="background:#fd7e14;">
+        <h5 class="modal-title">🏃 Імпорт тренувань з Garmin (GPX)</h5>
         <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
       </div>
       <div class="modal-body p-4">
-        <div id="stepUpload">
-          <div class="drop-zone" id="dropZone" onclick="document.getElementById('csvFileInput').click()">
-            <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+        <div id="gpxStepUpload">
+          <div class="drop-zone" id="gpxDropZone" onclick="document.getElementById('gpxFileInput').click()">
+            <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#fd7e14" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
               <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
               <polyline points="17 8 12 3 7 8"/>
               <line x1="12" y1="3" x2="12" y2="15"/>
             </svg>
-            <p>Перетягніть CSV файл сюди або натисніть, щоб вибрати</p>
-            <button class="btn btn-primary btn-sm" onclick="event.stopPropagation(); document.getElementById('csvFileInput').click()">Вибрати файл</button>
+            <p>Перетягніть .gpx файл сюди або натисніть, щоб вибрати</p>
+            <button class="btn btn-warning btn-sm" onclick="event.stopPropagation(); document.getElementById('gpxFileInput').click()">Вибрати GPX файл</button>
           </div>
-          <input type="file" id="csvFileInput" accept=".csv,.txt" style="display:none">
-          <div class="mt-3 p-3 bg-light rounded" style="font-size:13px;">
-            <div class="d-flex justify-content-between align-items-center mb-2">
-              <strong>Очікуваний формат CSV:</strong>
-              <span class="template-link" onclick="downloadTemplate()">⬇ Завантажити шаблон</span>
-            </div>
-            <code style="font-size:12px; color:#555;">date,type,duration_minutes,intensity<br>2026-02-22,running,60,3</code>
+          <input type="file" id="gpxFileInput" accept=".gpx" style="display:none">
+          <div class="mt-3 p-3 rounded" style="background:#fff8f0; border:1px solid #fde5c4; font-size:13px;">
+            <strong>📍 Як експортувати з Garmin Connect:</strong>
+            <ol class="mb-0 mt-2 ps-3" style="color:#555;">
+              <li>Відкрий <strong>Garmin Connect</strong> → вибери активність</li>
+              <li>Натисни іконку ⚙️ або <strong>"..."</strong> → <strong>Export to GPX</strong></li>
+              <li>Завантаж файл і завантаж сюди</li>
+            </ol>
           </div>
         </div>
-        <div id="importProgress">
+        <div id="gpxImportProgress" style="display:none;">
           <div class="text-center mb-3">
-            <div class="spinner-border text-primary mb-2" role="status"></div>
-            <p class="text-muted mb-1">Обробка файлу...</p>
+            <div class="spinner-border mb-2" style="color:#fd7e14;" role="status"></div>
+            <p class="text-muted mb-1">Обробка GPX файлу...</p>
           </div>
-          <div class="progress"><div class="progress-bar progress-bar-striped progress-bar-animated bg-primary" style="width:100%"></div></div>
+          <div class="progress"><div class="progress-bar progress-bar-striped progress-bar-animated" style="width:100%;background:#fd7e14;"></div></div>
         </div>
-        <div id="importResult" class="alert alert-success d-flex align-items-start gap-3 mb-0" role="alert">
+        <div id="gpxImportResult" class="alert alert-success d-flex align-items-start gap-3 mb-0" style="display:none;" role="alert">
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0;margin-top:2px;"><polyline points="20 6 9 17 4 12"/></svg>
-          <div><strong id="importResultTitle"></strong><br><span id="importResultText" style="font-size:13px;"></span>
-          <div id="importResultErrors" style="font-size:12px;color:#856404;margin-top:6px;"></div></div>
+          <div><strong id="gpxImportResultTitle"></strong><br><span id="gpxImportResultText" style="font-size:13px;"></span>
+          <div id="gpxImportResultErrors" style="font-size:12px;color:#856404;margin-top:6px;"></div></div>
         </div>
-        <div id="importError" class="alert alert-danger mb-0" role="alert">
+        <div id="gpxImportError" class="alert alert-danger mb-0" style="display:none;" role="alert">
           <strong>Помилка імпорту</strong>
-          <div id="importErrorText" style="font-size:13px;margin-top:4px;"></div>
+          <div id="gpxImportErrorText" style="font-size:13px;margin-top:4px;"></div>
         </div>
       </div>
       <div class="modal-footer">
         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Закрити</button>
-        <button type="button" class="btn btn-primary" id="doImportBtn" style="display:none" onclick="doImport()">Імпортувати</button>
-        <button type="button" class="btn btn-success" id="reloadBtn" style="display:none" onclick="location.reload()">✓ Оновити дашборд</button>
+        <button type="button" class="btn btn-warning text-white" id="doGpxImportBtn" style="display:none" onclick="doGpxImport()">Імпортувати</button>
+        <button type="button" class="btn btn-success" id="gpxReloadBtn" style="display:none" onclick="location.reload()">✓ Оновити дашборд</button>
       </div>
     </div>
   </div>
@@ -252,63 +253,61 @@ if (ctx) {
     });
 }
 
-let selectedFile = null;
-const dz = document.getElementById('dropZone');
-dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('drag-over'); });
-dz.addEventListener('dragleave', () => dz.classList.remove('drag-over'));
-dz.addEventListener('drop', e => { e.preventDefault(); dz.classList.remove('drag-over'); if (e.dataTransfer.files[0]) setFile(e.dataTransfer.files[0]); });
-document.getElementById('csvFileInput').addEventListener('change', e => { if (e.target.files[0]) setFile(e.target.files[0]); });
 
-function setFile(file) {
-    selectedFile = file;
-    dz.style.borderColor = '#0d6efd';
-    dz.querySelector('p').textContent = '✓ Обрано: ' + file.name;
-    document.getElementById('doImportBtn').style.display = 'inline-block';
-    hideResults();
+let selectedGpxFile = null;
+const gpxDz = document.getElementById('gpxDropZone');
+gpxDz.addEventListener('dragover', e => { e.preventDefault(); gpxDz.classList.add('drag-over'); });
+gpxDz.addEventListener('dragleave', () => gpxDz.classList.remove('drag-over'));
+gpxDz.addEventListener('drop', e => { e.preventDefault(); gpxDz.classList.remove('drag-over'); if (e.dataTransfer.files[0]) setGpxFile(e.dataTransfer.files[0]); });
+document.getElementById('gpxFileInput').addEventListener('change', e => { if (e.target.files[0]) setGpxFile(e.target.files[0]); });
+
+function setGpxFile(file) {
+    selectedGpxFile = file;
+    gpxDz.querySelector('p').textContent = '✓ Обрано: ' + file.name;
+    document.getElementById('doGpxImportBtn').style.display = 'inline-block';
 }
-function hideResults() {
-    ['importResult','importError','reloadBtn'].forEach(id => document.getElementById(id).style.display = 'none');
-}
-function doImport() {
-    if (!selectedFile) return;
-    document.getElementById('stepUpload').style.display = 'none';
-    document.getElementById('importProgress').style.display = 'block';
-    document.getElementById('doImportBtn').style.display = 'none';
-    hideResults();
+function doGpxImport() {
+    if (!selectedGpxFile) return;
+    document.getElementById('gpxStepUpload').style.display = 'none';
+    document.getElementById('gpxImportProgress').style.display = 'block';
+    document.getElementById('doGpxImportBtn').style.display = 'none';
+    document.getElementById('gpxImportResult').style.display = 'none';
+    document.getElementById('gpxImportError').style.display = 'none';
     const fd = new FormData();
-    fd.append('file', selectedFile);
-    fetch('/import-csv', { method: 'POST', body: fd })
+    fd.append('file', selectedGpxFile);
+    fetch('/import-gpx', { method: 'POST', body: fd })
     .then(r => r.json()).then(data => {
-        document.getElementById('importProgress').style.display = 'none';
-        document.getElementById('stepUpload').style.display = 'block';
-        if (data.error) { document.getElementById('importError').style.display = 'block'; document.getElementById('importErrorText').textContent = data.error; return; }
-        document.getElementById('importResult').style.display = 'flex';
-        document.getElementById('importResultTitle').textContent = `Імпортовано ${data.imported} тренувань!`;
-        document.getElementById('importResultText').textContent = 'Оновіть сторінку, щоб побачити їх на дашборді.';
-        if (data.errors?.length) document.getElementById('importResultErrors').innerHTML = '⚠ Пропущено:<br>' + data.errors.map(e=>'• '+e).join('<br>');
-        document.getElementById('reloadBtn').style.display = 'inline-block';
-        selectedFile = null; document.getElementById('csvFileInput').value = '';
+        document.getElementById('gpxImportProgress').style.display = 'none';
+        document.getElementById('gpxStepUpload').style.display = 'block';
+        if (data.error) {
+            document.getElementById('gpxImportError').style.display = 'block';
+            document.getElementById('gpxImportErrorText').textContent = data.error;
+            return;
+        }
+        document.getElementById('gpxImportResult').style.display = 'flex';
+        document.getElementById('gpxImportResultTitle').textContent = `Імпортовано ${data.imported} тренувань з Garmin!`;
+        document.getElementById('gpxImportResultText').textContent = 'Оновіть сторінку, щоб побачити їх на дашборді.';
+        if (data.errors?.length) document.getElementById('gpxImportResultErrors').innerHTML = '⚠ Пропущено:<br>' + data.errors.map(e=>'• '+e).join('<br>');
+        document.getElementById('gpxReloadBtn').style.display = 'inline-block';
+        selectedGpxFile = null; document.getElementById('gpxFileInput').value = '';
     }).catch(err => {
-        document.getElementById('importProgress').style.display = 'none';
-        document.getElementById('stepUpload').style.display = 'block';
-        document.getElementById('importError').style.display = 'block';
-        document.getElementById('importErrorText').textContent = 'Помилка: ' + err.message;
+        document.getElementById('gpxImportProgress').style.display = 'none';
+        document.getElementById('gpxStepUpload').style.display = 'block';
+        document.getElementById('gpxImportError').style.display = 'block';
+        document.getElementById('gpxImportErrorText').textContent = 'Помилка: ' + err.message;
     });
 }
-document.getElementById('csvImportModal').addEventListener('hidden.bs.modal', () => {
-    selectedFile = null; document.getElementById('csvFileInput').value = '';
-    document.getElementById('stepUpload').style.display = 'block';
-    document.getElementById('importProgress').style.display = 'none';
-    document.getElementById('doImportBtn').style.display = 'none';
-    dz.style.borderColor = '';
-    dz.querySelector('p').textContent = 'Перетягніть CSV файл сюди або натисніть, щоб вибрати';
-    hideResults();
+document.getElementById('gpxImportModal').addEventListener('hidden.bs.modal', () => {
+    selectedGpxFile = null; document.getElementById('gpxFileInput').value = '';
+    document.getElementById('gpxStepUpload').style.display = 'block';
+    document.getElementById('gpxImportProgress').style.display = 'none';
+    document.getElementById('doGpxImportBtn').style.display = 'none';
+    gpxDz.querySelector('p').textContent = 'Перетягніть .gpx файл сюди або натисніть, щоб вибрати';
+    document.getElementById('gpxImportResult').style.display = 'none';
+    document.getElementById('gpxImportError').style.display = 'none';
+    document.getElementById('gpxReloadBtn').style.display = 'none';
 });
-function downloadTemplate() {
-    const csv = 'date,type,duration_minutes,intensity\n2026-02-22,running,60,3\n2026-02-25,gym,45,4\n';
-    const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv],{type:'text/csv'}));
-    a.download = 'activetracker_template.csv'; a.click();
-}
+
 </script>
 </body>
 </html>
